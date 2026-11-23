@@ -24,6 +24,7 @@ import { proPreviewJobContract } from "../src/lib/onboarding/pro-plan";
 import { applyBookingClaim } from "../src/lib/onboarding/pro-identity-gate";
 import { sampleServiceNames } from "../src/lib/onboarding/pro-progress";
 import { withSalonContactLogin } from "../src/lib/onboarding/contact-login";
+import { insertWithSequenceRetry } from "../src/lib/onboarding/job-event-sequence";
 import { loadEnvConfig } from "@next/env";
 import type { PrismaClient } from "../src/generated/prisma/client";
 
@@ -86,13 +87,17 @@ type Emit = (stream: EventStream, fields: EventFields) => Promise<void>;
  * sequences (the `@@unique([jobId, sequence])` constraint).
  */
 async function makeEmitter(prisma: Prisma, jobId: string): Promise<Emit> {
-  const agg = await prisma.onboardingJobEvent.aggregate({ where: { jobId }, _max: { sequence: true } });
-  let sequence = agg._max.sequence ?? 0;
+  const nextSequence = async () => {
+    const agg = await prisma.onboardingJobEvent.aggregate({ where: { jobId }, _max: { sequence: true } });
+    return (agg._max.sequence ?? 0) + 1;
+  };
+  let sequence = (await nextSequence()) - 1;
 
   return async (stream, fields) => {
     const now = new Date();
-    sequence += 1;
-    await prisma.$transaction([
+    // The CRM also appends to this log (password reveals), so the cached
+    // sequence can be stale — retry from the DB max on collision.
+    sequence = await insertWithSequenceRetry(sequence + 1, (sequence) => prisma.$transaction([
       prisma.onboardingJobEvent.create({
         data: {
           jobId,
@@ -110,7 +115,7 @@ async function makeEmitter(prisma: Prisma, jobId: string): Promise<Emit> {
         where: { id: jobId },
         data: { eventCount: { increment: 1 }, lastEventAt: now },
       }),
-    ]);
+    ]), nextSequence);
   };
 }
 
