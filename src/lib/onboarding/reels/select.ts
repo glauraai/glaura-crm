@@ -7,7 +7,7 @@ import type { Reel } from "./ig-reels";
 // of the salon's services. Lifestyle/promo/greeting reels are dropped instead
 // of padding the feed — the Cloud Function would hold them out anyway.
 
-const MODEL = "claude-haiku-4-5";
+const MODEL = "claude-haiku-5-5";
 const CAPTION_CHARS = 400;
 
 export type CaptionCandidate = { id: string; caption: string };
@@ -38,9 +38,9 @@ export const haikuReelClassifier: ReelClassifier = async (candidates, services) 
   const client = new Anthropic({ timeout: 60_000 });
   const response = await client.messages.parse({
     model: MODEL,
-    max_tokens: 2048,
+    max_tokens: 4096, // Haiku 5.5 thinking counts toward the cap
     system: SYSTEM_PROMPT,
-    output_config: { format: zodOutputFormat(MatchSchema) },
+    output_config: { format: zodOutputFormat(MatchSchema), effort: "low" },
     messages: [{
       role: "user",
       content: `Services du salon :\n${services.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\nReels :\n${JSON.stringify(candidates)}`,

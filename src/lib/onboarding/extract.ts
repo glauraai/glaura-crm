@@ -13,7 +13,7 @@
  *      expander leaves behind for Treatwell) out of the ~1.4-1.9MB expanded
  *      HTML and renders them as a compact plain-text block. This is what
  *      keeps the Haiku call small and cheap.
- *   2. `extractSalon()` — sends that trimmed text to `claude-haiku-4-5`
+ *   2. `extractSalon()` — sends that trimmed text to `claude-haiku-5-5`
  *      with a Zod structured-output schema and returns the parsed result.
  *
  * Plain TS module (no Next.js imports) so it can run from a CLI script or a
@@ -205,7 +205,7 @@ function renderTrimmedText(data: TrimmedSalonData, sourceType: SourceType): stri
     lines.push("(no services found)");
   } else {
     for (const [category, items] of byCategory) {
-      lines.push(`## ${category || "(uncategorized)"}`);
+      lines.push(`## ${category || UNCATEGORIZED_HEADING}`);
       for (const item of items) {
         const desc = item.description ? ` | ${item.description}` : "";
         lines.push(`- ${item.name} | duration: ${item.duration || "?"} | price: ${item.price || "?"}${desc}`);
@@ -989,10 +989,12 @@ export function extractPageReviews(html: string, sourceType: SourceType): Trimme
   return parseSourcePage(html, sourceType).reviews;
 }
 
-const EXTRACTION_MODEL = "claude-haiku-4-5";
+const EXTRACTION_MODEL = "claude-haiku-5-5";
 // Large menus (e.g. a 320-service Planity salon) overflow a 16K cap and the
 // structured-output JSON gets truncated mid-string. Haiku 4.5 allows up to 64K
-// output tokens; 32K comfortably covers ~500 services with margin.
+// output tokens; 32K comfortably covers ~500 services with margin. Haiku 5.5
+// thinks by default and thinking counts toward this cap, so effort stays "low":
+// extraction is mechanical copying, not reasoning.
 const MAX_OUTPUT_TOKENS = 32000;
 
 const SYSTEM_PROMPT = `You are a precise data-extraction engine for a beauty-salon booking-page onboarding pipeline.
@@ -1047,13 +1049,29 @@ async function callExtraction(client: Anthropic, userPrompt: string): Promise<Ra
     model: EXTRACTION_MODEL,
     max_tokens: MAX_OUTPUT_TOKENS,
     system: SYSTEM_PROMPT,
-    output_config: { format: zodOutputFormat(SalonExtractSchema) },
+    output_config: { format: zodOutputFormat(SalonExtractSchema), effort: "low" },
     messages: [{ role: "user", content: userPrompt }],
   });
   if (!response.parsed_output) {
-    throw new Error("claude-haiku-4-5 structured-output extraction returned no parsed_output");
+    throw new Error(`${EXTRACTION_MODEL} structured-output extraction returned no parsed_output`);
   }
   return response.parsed_output as RawExtract;
+}
+
+/** Our own heading for services with no on-page category (not page text). */
+const UNCATEGORIZED_HEADING = "(uncategorized)";
+
+/**
+ * The model copies headings verbatim, including our placeholder; map it back
+ * to "" so it never reaches the salon as a real subcategory.
+ */
+export function stripPlaceholderSubcategories<T extends { services: { subcategory_name: string }[] }>(extract: T): T {
+  return {
+    ...extract,
+    services: extract.services.map((service) =>
+      service.subcategory_name.trim() === UNCATEGORIZED_HEADING ? { ...service, subcategory_name: "" } : service,
+    ),
+  };
 }
 
 /** Splits `items` into consecutive slices of at most `size`. */
@@ -1114,7 +1132,7 @@ export function previewSalonPage(html: string, sourceType: SourceType) {
 }
 
 /**
- * Trims the given HTML, sends it to claude-haiku-4-5 with a structured-
+ * Trims the given HTML, sends it to claude-haiku-5-5 with a structured-
  * output schema, and returns the parsed, validated salon data.
  */
 export async function extractSalon(
@@ -1138,7 +1156,7 @@ export async function extractSalon(
       : await callExtraction(client, buildUserPrompt(renderTrimmedText(data, sourceType), sourceType, url, hints));
 
   // Reviews come from the page itself, never from the model's output.
-  const parsed = { ...(output as SalonExtract), reviews: data.reviews };
+  const parsed = { ...stripPlaceholderSubcategories(output as SalonExtract), reviews: data.reviews };
   return sourceType === "planity" ? mergePlanityOptions(parsed, html) : parsed;
 }
 
