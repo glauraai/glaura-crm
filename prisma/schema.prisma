@@ -269,6 +269,22 @@ model Prospect {
 
   tier Int @default(1) // 1=IG inconnu … 4=IG fort (see lib/prospection/tier.ts)
 
+  // AI fit scoring & French legal/revenue enrichment (batch-populated)
+  aiScore            Float? // 0-100 Glaura fit score
+  aiSpecialty        String? // both | nails | beauty | hair | barber | spa | other | unknown
+  aiOwnership        String? // independent_indicated | chain_or_franchise | unknown
+  aiSummary          String?   @db.Text
+  aiScoredAt         DateTime?
+  legalEntity        String?
+  siren              String?
+  siret              String?
+  activeSites        Int?
+  companyMatchStatus String? // VERIFIED | CANDIDATE | UNRESOLVED | EXCLUDED
+  revenueEur         Int? // latest published annual company revenue (EUR)
+  revenueYear        Int?
+  revenueStatus      String? // PUBLISHED | CONFIDENTIAL | UNAVAILABLE
+  filingUrl          String? // BODACC filing notice URL
+
   status         ProspectStatus @default(NOUVEAU)
   matchedSalonId String? // existing CRM salon this prospect was matched to (DEJA_CRM)
 
@@ -294,6 +310,9 @@ model Prospect {
   @@index([assignedToId, status])
   @@index([igStatus])
   @@index([googleStatus])
+  @@index([aiScore])
+  @@index([aiSpecialty])
+  @@index([siren])
 }
 
 // A daily prospecting round: 20-30 prospects in one zone, assigned to a commercial.

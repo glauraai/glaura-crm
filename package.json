@@ -27,6 +27,7 @@
     "test": "vitest run",
     "prospect:jobs": "tsx scripts/process-prospect-jobs.ts",
     "prospect:worker": "tsx scripts/process-prospect-jobs.ts --loop",
+    "prospect:import-scores": "tsx scripts/import-prospect-scores.ts",
     "dev:setup": "tsx scripts/setup-local.ts",
     "instagram:sync": "tsx scripts/sync-instagram-inbox.ts"
   },
