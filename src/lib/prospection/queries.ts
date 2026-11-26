@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { startOfDay } from "@/lib/dailyPriority";
 import { ZONES } from "@/lib/prospection/zones";
+import { AI_OWNERSHIP_LABEL, AI_SPECIALTY_LABEL, BEAUTY_NAILS_SPECIALTIES } from "@/lib/prospection/ai-score";
 
 export type ZoneAvailability = {
   slug: string;
@@ -50,6 +51,16 @@ export type TourneeProspect = {
   igCandidates: unknown;
   tier: number;
   status: string;
+  aiScore: number | null;
+  aiSpecialty: string | null;
+  aiOwnership: string | null;
+  legalEntity: string | null;
+  siren: string | null;
+  siret: string | null;
+  revenueEur: number | null;
+  revenueYear: number | null;
+  revenueStatus: string | null;
+  filingUrl: string | null;
 };
 
 export type TourneeWithProspects = {
@@ -87,6 +98,16 @@ export async function getTodaysTournees(today = new Date(), ownerId?: string): P
           igCandidates: true,
           tier: true,
           status: true,
+          aiScore: true,
+          aiSpecialty: true,
+          aiOwnership: true,
+          legalEntity: true,
+          siren: true,
+          siret: true,
+          revenueEur: true,
+          revenueYear: true,
+          revenueStatus: true,
+          filingUrl: true,
         },
       },
     },
@@ -133,13 +154,22 @@ export async function getProspectPool(user: { id: string; role?: string }, filte
     ...(filters.ig === "pending" ? { igStatus: "A_VALIDER" } : {}),
     ...(filters.ig === "missing" ? { instagram: null } : {}),
     ...(filters.owner === "none" && user.role === "ADMIN" ? { assignedToId: null, tourneeId: null } : {}),
-    ...(filters.q?.trim() ? { OR: ["name", "city", "address", "instagram"].map(key => ({ [key]: { contains: filters.q!.trim().slice(0, 200), mode: "insensitive" } })) } : {}),
+    ...(filters.specialty === "beauty_nails" ? { aiSpecialty: { in: [...BEAUTY_NAILS_SPECIALTIES] } } : filters.specialty && filters.specialty in AI_SPECIALTY_LABEL ? { aiSpecialty: filters.specialty } : {}),
+    ...(filters.ownership && filters.ownership in AI_OWNERSHIP_LABEL ? { aiOwnership: filters.ownership } : {}),
+    ...(filters.company === "VERIFIED" ? { companyMatchStatus: "VERIFIED" } : filters.company === "PUBLISHED" ? { revenueStatus: "PUBLISHED" } : {}),
+    ...(filters.q?.trim() ? { OR: ["name", "city", "address", "instagram", "legalEntity", "siren", "phone", "email", "contactName"].map(key => ({ [key]: { contains: filters.q!.trim().slice(0, 200), mode: "insensitive" } })) } : {}),
   };
+  const orderBy: import("@/generated/prisma/client").Prisma.ProspectOrderByWithRelationInput[] =
+    filters.sort === "ai_score"
+      ? [{ aiScore: { sort: "desc", nulls: "last" } }, { reviewCount: "desc" }, { id: "asc" }]
+      : filters.sort === "revenue"
+        ? [{ revenueEur: { sort: "desc", nulls: "last" } }, { aiScore: { sort: "desc", nulls: "last" } }, { id: "asc" }]
+        : [{ tier: "desc" }, { aiScore: { sort: "desc", nulls: "last" } }, { updatedAt: "desc" }, { id: "asc" }];
   const [total, available, assigned, rows] = await Promise.all([
     prisma.prospect.count({ where }),
     prisma.prospect.count({ where: { ...prospectScope(user), status: "NOUVEAU" } }),
     prisma.prospect.count({ where: { ...prospectScope(user), status: "EN_TOURNEE" } }),
-    prisma.prospect.findMany({ where, orderBy: [{ tier: "desc" }, { updatedAt: "desc" }, { id: "asc" }], skip: (page - 1) * 50, take: 50,
+    prisma.prospect.findMany({ where, orderBy, skip: (page - 1) * 50, take: 50,
       include: { assignedTo: { select: { id: true, name: true, email: true } }, tournee: { select: { assignedTo: { select: { id: true, name: true, email: true } } } }, _count: { select: { tasks: { where: { doneAt: null } } } } },
     }),
   ]);

@@ -3,6 +3,12 @@ import { convertProspect, discardProspect, releaseProspect, validateInstagram } 
 import { METIER_LABEL, PROSPECT_SOURCE_LABEL, PROSPECT_SOURCE_STYLE } from "@/lib/labels";
 import type { IgCandidateJson, TourneeProspect } from "@/lib/prospection/queries";
 import { TIER_LABEL, TIER_STYLE } from "@/lib/prospection/tier";
+import {
+  AI_SPECIALTY_LABEL,
+  aiScoreBadgeStyle,
+  annuaireEntreprisesUrl,
+  formatRevenueEur,
+} from "@/lib/prospection/ai-score";
 import { Stars } from "@/components/Stars";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +36,8 @@ function instagramUrl(p: TourneeProspect): string {
 
 export function ProspectCard({ prospect, admin = false }: { prospect: TourneeProspect; admin?: boolean }) {
   const source = prospect.source as ProspectSource;
+  const registryHref = annuaireEntreprisesUrl(prospect.siret, prospect.siren);
+  const revenueLabel = formatRevenueEur(prospect.revenueEur, prospect.revenueYear);
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
       <div className="flex items-start justify-between gap-2">
@@ -38,6 +46,14 @@ export function ProspectCard({ prospect, admin = false }: { prospect: TourneePro
           <p className="text-sm text-slate-500">{prospect.address ?? `${prospect.postalCode ?? ""} ${prospect.city ?? ""}`}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {prospect.aiScore != null && (
+            <span
+              className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", aiScoreBadgeStyle(prospect.aiScore))}
+              title={prospect.aiSpecialty ? `Score IA · ${AI_SPECIALTY_LABEL[prospect.aiSpecialty] ?? prospect.aiSpecialty}` : "Score IA"}
+            >
+              {Math.round(prospect.aiScore)}
+            </span>
+          )}
           <span
             className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", TIER_STYLE[prospect.tier])}
             title={`Niveau ${prospect.tier} — ${TIER_LABEL[prospect.tier]}`}
@@ -49,6 +65,19 @@ export function ProspectCard({ prospect, admin = false }: { prospect: TourneePro
           </span>
         </div>
       </div>
+
+      {(prospect.legalEntity || revenueLabel) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          {registryHref ? (
+            <a href={registryHref} target="_blank" rel="noreferrer" className="font-medium text-slate-700 hover:underline">
+              {prospect.legalEntity ?? `SIREN ${prospect.siren}`} ↗
+            </a>
+          ) : prospect.legalEntity ? (
+            <span className="font-medium text-slate-700">{prospect.legalEntity}</span>
+          ) : null}
+          {revenueLabel && <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">CA {revenueLabel}</span>}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Stars rating={prospect.rating} />

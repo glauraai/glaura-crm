@@ -30,3 +30,15 @@ it("only includes verified dual-platform salons in the dedicated filter", async 
   expect(where).toMatchObject({ treatwellUrl: { not: null }, planityUrl: { not: null }, dualPlatformCheckedAt: { not: null } });
   expect(where.AND[0].OR).toContainEqual({ assignedToId: "rep" });
 });
+it("filters by AI specialty, company match and sorts by AI score or revenue", async () => {
+  await getProspectPool({ id: "admin", role: "ADMIN" }, { specialty: "beauty_nails", company: "PUBLISHED", sort: "ai_score" });
+  const query = state.find.mock.calls[0][0];
+  expect(query.where).toMatchObject({ aiSpecialty: { in: ["both", "nails", "beauty"] }, revenueStatus: "PUBLISHED" });
+  expect(query.orderBy[0]).toEqual({ aiScore: { sort: "desc", nulls: "last" } });
+
+  state.find.mockClear();
+  await getProspectPool({ id: "admin", role: "ADMIN" }, { specialty: "nails", company: "VERIFIED", sort: "revenue" });
+  const q2 = state.find.mock.calls[0][0];
+  expect(q2.where).toMatchObject({ aiSpecialty: "nails", companyMatchStatus: "VERIFIED" });
+  expect(q2.orderBy[0]).toEqual({ revenueEur: { sort: "desc", nulls: "last" } });
+});
