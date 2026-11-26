@@ -77,13 +77,23 @@ export function salonNameFor(lead: Pick<LauraLead, "salon" | "name">): string {
   return lead.salon?.trim() || lead.name;
 }
 
+/** Which website form the lead came from, shown on the salon card. */
+export function sourceLabelFor(lead: Pick<LauraLead, "source">): string {
+  const source = lead.source?.trim() ?? "";
+  if (source === "pro-signup") return "Page /pro/creer-ma-page";
+  if (source === "compte-en-24h") return "Page /compte-en-24h";
+  if (source.startsWith("pro-callback:")) return `Rappel ${source.slice("pro-callback:".length) || "/pro"}`;
+  return "Page /laura";
+}
+
 /** What a commercial reads before calling back. */
 export function notesFor(
   lead: Pick<LauraLead, "source" | "utmSource" | "utmMedium" | "utmCampaign">,
 ): string {
   const utm = [lead.utmSource, lead.utmMedium, lead.utmCampaign].filter(Boolean);
+  const page = sourceLabelFor(lead).replace(/^(Page|Rappel) /, "");
   return [
-    "Demande de rappel depuis /laura.",
+    `Demande de rappel depuis ${page}.`,
     lead.source ? `Source : ${lead.source}` : null,
     utm.length ? `UTM : ${utm.join(" / ")}` : null,
   ]
