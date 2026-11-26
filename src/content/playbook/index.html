@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/glaura-design-system-54c9c19b-43c6-4c98-a5c0-48254f3d8243/colors_and_type.css">
+<script src="_ds/glaura-design-system-54c9c19b-43c6-4c98-a5c0-48254f3d8243/_ds_bundle.js"></script>
+<script src="./image-slot.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;background:#F8F8F7;color:#171717;font-family:'Inter',system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+h1,h2,h3,p{margin:0;font-family:'Inter',system-ui,-apple-system,sans-serif}
+a{color:#C42A63;text-decoration:none}
+a:hover{text-decoration:underline}
+button,input{font-family:inherit;-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible{outline:2px solid rgba(255,77,138,.6);outline-offset:2px}
+@keyframes pbPop{0%{transform:scale(.7)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+@media print{[data-noprint]{display:none!important}[data-print-main]{overflow:visible!important;height:auto!important}html,body{height:auto;background:#fff}}
+</style>
+</helmet>
+<div style="display:flex;height:100vh;height:100dvh;background:#F8F8F7;overflow:hidden">
+
+  <aside data-noprint="" aria-label="Sommaire du playbook" style="position:{{ sbPos }};top:0;left:0;bottom:0;z-index:40;width:{{ sbW }};flex-shrink:0;transform:{{ sbTransform }};transition:transform 200ms cubic-bezier(.16,1,.3,1);background:#FFFFFF;border-right:1px solid #EAEAEA;display:flex;flex-direction:column;box-shadow:{{ sbShadow }};height:100%">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:18px 16px 10px 18px">
+      <button onClick="{{ goHome }}" aria-label="Accueil du playbook" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;background:none;border:0;padding:0;cursor:pointer">
+        <img src="assets/logo-horizontal-color.png" alt="Glaura" style="height:30px;width:auto;display:block">
+        <span style="font-size:12px;font-weight:600;color:#737373;letter-spacing:.02em">Sales Playbook</span>
+      </button>
+      <sc-if value="{{ compact }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ closeNav }}" aria-label="Fermer le menu" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:0;background:none;border-radius:10px;cursor:pointer;color:#171717">
+          <svg viewBox="0 0 24 24" width="20" height="20" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
+      </sc-if>
+    </div>
+    <div style="padding:6px 12px 10px;display:flex;flex-direction:column;gap:10px">
+      <button onClick="{{ openSearch }}" style="display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border:1px solid #EAEAEA;border-radius:12px;background:#F8F8F7;color:#737373;font-size:14px;cursor:pointer;text-align:left">
+        <svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <span style="flex:1">Rechercher</span>
+        <span style="font-size:11px;font-weight:600;border:1px solid #EAEAEA;background:#fff;border-radius:6px;padding:2px 6px">⌘K</span>
+      </button>
+      <div role="group" aria-label="Mode d'utilisation" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:#F8F8F7;border:1px solid #EAEAEA;border-radius:12px">
+        <button onClick="{{ setFormation }}" aria-pressed="{{ isFormation }}" style="min-height:36px;border:0;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;background:{{ modeFBg }};color:{{ modeFColor }};box-shadow:{{ modeFShadow }};transition:background 150ms">Formation</button>
+        <button onClick="{{ setTerrain }}" aria-pressed="{{ isTerrain }}" style="min-height:36px;border:0;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;background:{{ modeTBg }};color:{{ modeTColor }};box-shadow:{{ modeTShadow }};transition:background 150ms">Terrain</button>
+      </div>
+    </div>
+    <nav style="flex:1;overflow-y:auto;padding:4px 12px 16px;display:flex;flex-direction:column;gap:2px">
+      <button onClick="{{ goHome }}" aria-current="{{ homeCurrent }}" style="display:flex;align-items:center;gap:10px;min-height:44px;padding:0 10px;border:0;border-radius:10px;cursor:pointer;text-align:left;font-size:14px;background:{{ homeNav.bg }};color:{{ homeNav.color }};font-weight:{{ homeNav.weight }}">
+        <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><path d="M9 22V12h6v10"></path></svg>
+        Accueil
+      </button>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#737373;padding:14px 10px 6px">Les 7 étapes</div>
+      <sc-for list="{{ navChapters }}" as="n" hint-placeholder-count="7">
+        <button onClick="{{ n.go }}" aria-current="{{ n.current }}" style="display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px;border:0;border-radius:10px;cursor:pointer;text-align:left;font-size:14px;line-height:1.3;background:{{ n.bg }};color:{{ n.color }};font-weight:{{ n.weight }}">
+          <span style="font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ n.numColor }};width:20px;flex-shrink:0">{{ n.num }}</span>
+          <span style="flex:1">{{ n.title }}</span>
+          <sc-if value="{{ n.read }}" hint-placeholder-val="{{ false }}">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-label="Lu" style="fill:none;stroke:#C42A63;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><path d="M20 6 9 17l-5-5"></path></svg>
+          </sc-if>
+        </button>
+      </sc-for>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#737373;padding:16px 10px 6px">Accès rapides</div>
+      <sc-for list="{{ navQuick }}" as="n" hint-placeholder-count="4">
+        <button onClick="{{ n.go }}" aria-current="{{ n.current }}" style="display:flex;align-items:center;gap:10px;min-height:44px;padding:0 10px;border:0;border-radius:10px;cursor:pointer;text-align:left;font-size:14px;background:{{ n.bg }};color:{{ n.color }};font-weight:{{ n.weight }}">
+          <span style="width:6px;height:6px;border-radius:999px;background:#FF4D8A;flex-shrink:0;margin:0 7px"></span>
+          {{ n.title }}
+        </button>
+      </sc-for>
+    </nav>
+    <div style="border-top:1px solid #EAEAEA;padding:14px 18px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#737373"><span>Chapitres lus</span><span style="font-weight:600;color:#171717;font-variant-numeric:tabular-nums">{{ readCount }}/7</span></div>
+      <div style="height:4px;background:#F1F1F0;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ readPct }};background:#FF4D8A;border-radius:999px;transition:width 200ms"></div></div>
+    </div>
+  </aside>
+
+  <sc-if value="{{ navScrim }}" hint-placeholder-val="{{ false }}">
+    <div data-noprint="" onClick="{{ closeNav }}" style="position:fixed;inset:0;background:rgba(23,23,23,.32);z-index:30"></div>
+  </sc-if>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;height:100%">
+    <sc-if value="{{ compact }}" hint-placeholder-val="{{ false }}">
+      <header data-noprint="" style="display:flex;align-items:center;gap:8px;height:60px;padding:0 8px;background:#fff;border-bottom:1px solid #EAEAEA;flex-shrink:0">
+        <button onClick="{{ openNav }}" aria-label="Ouvrir le sommaire" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:0;background:none;border-radius:10px;cursor:pointer;color:#171717">
+          <svg viewBox="0 0 24 24" width="22" height="22" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        </button>
+        <button onClick="{{ goHome }}" aria-label="Accueil" style="background:none;border:0;padding:0;cursor:pointer;display:flex"><img src="assets/logo-horizontal-color.png" alt="Glaura" style="height:26px;width:auto"></button>
+        <span style="flex:1;font-size:13px;color:#737373;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ topbarLabel }}</span>
+        <button onClick="{{ openSearch }}" aria-label="Rechercher" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:0;background:none;border-radius:10px;cursor:pointer;color:#171717">
+          <svg viewBox="0 0 24 24" width="20" height="20" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        </button>
+      </header>
+    </sc-if>
+
+    <main ref="{{ mainRef }}" onScroll="{{ onScroll }}" data-print-main="" style="flex:1;overflow-y:auto;position:relative;-webkit-overflow-scrolling:touch">
+      <div data-noprint="" style="position:sticky;top:0;z-index:5;height:3px"><div style="height:3px;width:{{ scrollPctCss }};background:#FF4D8A;border-radius:0 999px 999px 0"></div></div>
+      <div style="display:flex;gap:48px;justify-content:center;padding:{{ pad }}">
+        <div style="flex:1;min-width:0;max-width:760px">
+
+          <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+            <div data-screen-label="Accueil" style="display:flex;flex-direction:column;gap:32px">
+              <header style="display:flex;flex-direction:column;gap:18px">
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <h1 style="font-size:28px;font-weight:700;letter-spacing:-0.02em;line-height:1.15">Sales Playbook</h1>
+                  <p style="font-size:16px;color:#737373;line-height:1.5">La méthode terrain pour signer et activer des salons.</p>
+                </div>
+                <button onClick="{{ openSearch }}" style="display:flex;align-items:center;gap:12px;min-height:52px;padding:0 16px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;color:#737373;font-size:15px;cursor:pointer;text-align:left;width:100%">
+                  <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                  <span style="flex:1">Rechercher un script, une objection, une méthode…</span>
+                </button>
+              </header>
+
+              <section style="background:#fff;border:1px solid #EAEAEA;border-radius:16px;padding:{{ heroPad }};display:flex;flex-direction:column;gap:14px">
+                <h2 style="font-size:{{ heroSize }};font-weight:700;letter-spacing:-0.02em;line-height:1.18;text-wrap:balance">Tu as 5 minutes pour convaincre. <span style="color:#C42A63">Prépare-toi comme si tu n'en avais que 5.</span></h2>
+                <p style="font-size:16px;line-height:1.6;color:#525252;max-width:600px;text-wrap:pretty">Les patronnes de salons sont occupées. Arrive préparé, identifie leur problème principal et montre immédiatement comment Glaura peut les aider.</p>
+              </section>
+
+              <section aria-label="Raccourcis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:12px">
+                <button onClick="{{ goC2 }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-height:132px;padding:18px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;cursor:pointer;text-align:left;color:#171717;transition:border-color 150ms" style-hover="border-color:#FF4D8A">
+                  <span style="width:40px;height:40px;border-radius:12px;background:#FFF0F5;color:#C42A63;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg></span>
+                  <span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:15px;font-weight:600">Préparer un appel</span><span style="font-size:13px;color:#737373;line-height:1.4">Checklist et accroches</span></span>
+                </button>
+                <button onClick="{{ goC3 }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-height:132px;padding:18px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;cursor:pointer;text-align:left;color:#171717;transition:border-color 150ms" style-hover="border-color:#FF4D8A">
+                  <span style="width:40px;height:40px;border-radius:12px;background:#FFF0F5;color:#C42A63;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg></span>
+                  <span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:15px;font-weight:600">Préparer une visite</span><span style="font-size:13px;color:#737373;line-height:1.4">Compte salon et angle</span></span>
+                </button>
+                <button onClick="{{ goObjections }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-height:132px;padding:18px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;cursor:pointer;text-align:left;color:#171717;transition:border-color 150ms" style-hover="border-color:#FF4D8A">
+                  <span style="width:40px;height:40px;border-radius:12px;background:#FFF0F5;color:#C42A63;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></span>
+                  <span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:15px;font-weight:600">Répondre à une objection</span><span style="font-size:13px;color:#737373;line-height:1.4">Réponses prêtes à l'emploi</span></span>
+                </button>
+                <button onClick="{{ goC6 }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-height:132px;padding:18px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;cursor:pointer;text-align:left;color:#171717;transition:border-color 150ms" style-hover="border-color:#FF4D8A">
+                  <span style="width:40px;height:40px;border-radius:12px;background:#FFF0F5;color:#C42A63;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" width="20" height="20" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg></span>
+                  <span style="display:flex;flex-direction:column;gap:4px"><span style="font-size:15px;font-weight:600">Conclure une vente</span><span style="font-size:13px;color:#737373;line-height:1.4">Méthode, script et tarifs</span></span>
+                </button>
+              </section>
+
+              <section style="display:flex;flex-direction:column;gap:14px">
+                <h2 style="font-size:18px;font-weight:600;letter-spacing:-0.01em">Les 7 étapes de la vente</h2>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:12px">
+                  <sc-for list="{{ navChapters }}" as="c" hint-placeholder-count="7">
+                    <button onClick="{{ c.go }}" style="display:flex;flex-direction:column;gap:10px;min-height:120px;padding:18px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;cursor:pointer;text-align:left;color:#171717;transition:border-color 150ms" style-hover="border-color:#FF4D8A">
+                      <span style="display:flex;align-items:center;justify-content:space-between;width:100%">
+                        <span style="font-size:12px;font-weight:600;color:#C42A63;font-variant-numeric:tabular-nums">Étape {{ c.num }}</span>
+                        <sc-if value="{{ c.read }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:600;color:#737373;display:flex;align-items:center;gap:4px"><svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6 9 17l-5-5"></path></svg>Lu</span></sc-if>
+                      </span>
+                      <span style="font-size:16px;font-weight:600;line-height:1.3">{{ c.title }}</span>
+                      <span style="font-size:14px;color:#737373;line-height:1.45;text-wrap:pretty">{{ c.goal }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </section>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isPage }}" hint-placeholder-val="{{ false }}">
+            <article data-screen-label="{{ page.screenLabel }}" style="display:flex;flex-direction:column;gap:36px">
+              <header style="display:flex;flex-direction:column;gap:12px">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:#737373">
+                  <sc-if value="{{ page.hasNum }}" hint-placeholder-val="{{ true }}"><span style="font-weight:600;color:#C42A63;background:#FFF0F5;border-radius:999px;padding:4px 10px">Étape {{ page.num }}</span></sc-if>
+                  <span style="font-weight:500;color:#171717">{{ page.eyebrow }}</span>
+                  <sc-if value="{{ page.hasRead }}" hint-placeholder-val="{{ true }}">
+                    <span aria-hidden="true">·</span>
+                    <span style="display:flex;align-items:center;gap:5px"><svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>{{ page.read }} de lecture</span>
+                  </sc-if>
+                  <sc-if value="{{ page.isRead }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:4px;font-weight:600;color:#171717"><svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:#C42A63;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M20 6 9 17l-5-5"></path></svg>Lu</span></sc-if>
+                </div>
+                <h1 style="font-size:{{ h1Size }};font-weight:700;letter-spacing:-0.02em;line-height:1.15;text-wrap:balance">{{ page.h1 }}</h1>
+                <p style="font-size:17px;line-height:1.55;color:#737373;text-wrap:pretty;max-width:640px">{{ page.goal }}</p>
+              </header>
+
+              <sc-for list="{{ blocks }}" as="b" hint-placeholder-count="4">
+                <section id="{{ b.anchor }}" style="display:flex;flex-direction:column;gap:14px;scroll-margin-top:24px">
+                  <sc-if value="{{ b.hasLabel }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <sc-if value="{{ b.hasLetter }}" hint-placeholder-val="{{ false }}"><span style="width:24px;height:24px;border-radius:7px;background:#171717;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0">{{ b.letter }}</span></sc-if>
+                      <h2 style="font-size:18px;font-weight:600;letter-spacing:-0.01em;line-height:1.3">{{ b.label }}</h2>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_obtain }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:20px 22px;font-size:19px;font-weight:600;line-height:1.4;letter-spacing:-0.01em;text-wrap:pretty">{{ b.text }}</div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_quote }}" hint-placeholder-val="{{ false }}">
+                    <figure style="margin:0;background:#fff;border:1px solid #EAEAEA;border-radius:16px;padding:28px 26px;display:flex;flex-direction:column;gap:10px">
+                      <span aria-hidden="true" style="font-size:44px;line-height:.6;color:#FF4D8A;font-weight:700;height:22px">“</span>
+                      <blockquote style="margin:0;font-size:22px;font-weight:600;line-height:1.35;letter-spacing:-0.015em;text-wrap:pretty">{{ b.text }}</blockquote>
+                    </figure>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_method }}" hint-placeholder-val="{{ false }}">
+                    <ol style="list-style:none;margin:0;padding:0;background:#fff;border:1px solid #EAEAEA;border-radius:14px;overflow:hidden">
+                      <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="4">
+                        <li style="display:flex;gap:14px;align-items:flex-start;padding:16px 20px;border-top:{{ it.bt }}">
+                          <span style="width:28px;height:28px;border-radius:999px;border:1px solid #EAEAEA;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-variant-numeric:tabular-nums">{{ it.n }}</span>
+                          <span style="font-size:16px;line-height:1.5;padding-top:3px">{{ it.text }}</span>
+                        </li>
+                      </sc-for>
+                    </ol>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_tip }}" hint-placeholder-val="{{ false }}">
+                    <aside style="background:#fff;border:1px solid #EAEAEA;border-radius:16px;padding:22px 24px;display:flex;gap:16px;align-items:flex-start">
+                      <span style="width:40px;height:40px;border-radius:999px;background:#FF4D8A;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg viewBox="0 0 24 24" width="18" height="18" style="fill:currentColor;stroke:none"><path d="M12 2c.4 3.9 2.1 5.6 6 6-3.9.4-5.6 2.1-6 6-.4-3.9-2.1-5.6-6-6 3.9-.4 5.6-2.1 6-6Z"></path><path d="M18.5 14c.2 2 1 2.8 3 3-2 .2-2.8 1-3 3-.2-2-1-2.8-3-3 2-.2 2.8-1 3-3Z"></path></svg></span>
+                      <div style="display:flex;flex-direction:column;gap:6px">
+                        <span style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#C42A63">{{ b.tipLabel }}</span>
+                        <p style="font-size:17px;font-weight:500;line-height:1.5;text-wrap:pretty">{{ b.text }}</p>
+                      </div>
+                    </aside>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_script }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #EAEAEA;border-radius:16px;overflow:hidden">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px 12px 20px;border-bottom:1px solid #EAEAEA;flex-wrap:wrap">
+                        <span style="font-size:14px;font-weight:600">{{ b.s.title }}</span>
+                        <button onClick="{{ b.s.copy }}" style="display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;border:0;background:{{ b.s.btnBg }};color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:background 150ms">
+                          <sc-if value="{{ b.s.copied }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round;animation:pbPop 180ms cubic-bezier(.34,1.56,.64,1)"><path d="M20 6 9 17l-5-5"></path></svg>Copié</sc-if>
+                          <sc-if value="{{ b.s.notCopied }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>Copier le script</sc-if>
+                        </button>
+                      </div>
+                      <p style="padding:20px 22px;font-size:17px;font-weight:500;line-height:1.6;white-space:pre-line;text-wrap:pretty">
+                        <sc-for list="{{ b.s.segs }}" as="sg" hint-placeholder-count="1"><sc-if value="{{ sg.ph }}" hint-placeholder-val="{{ false }}"><span style="background:#FFF0F5;color:#C42A63;border-radius:6px;padding:1px 5px;font-weight:600">{{ sg.t }}</span></sc-if><sc-if value="{{ sg.plain }}" hint-placeholder-val="{{ true }}">{{ sg.t }}</sc-if></sc-for>
+                      </p>
+                      <sc-if value="{{ b.s.hasWarn }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;gap:10px;align-items:flex-start;padding:14px 22px;background:#F8F8F7;border-top:1px solid #EAEAEA;font-size:14px;line-height:1.5;color:#525252">
+                          <svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
+                          <span>{{ b.s.warn }}</span>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_scenarios }}" hint-placeholder-val="{{ false }}">
+                    <div role="tablist" aria-label="Scénarios" style="display:flex;gap:4px;padding:4px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;align-self:flex-start;max-width:100%;overflow-x:auto">
+                      <sc-for list="{{ b.tabs }}" as="t" hint-placeholder-count="2">
+                        <button role="tab" aria-selected="{{ t.active }}" onClick="{{ t.select }}" style="min-height:44px;padding:0 16px;border:0;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;background:{{ t.bg }};color:{{ t.color }};transition:background 150ms,color 150ms">{{ t.label }}</button>
+                      </sc-for>
+                    </div>
+                    <div role="tabpanel" style="background:#fff;border:1px solid #EAEAEA;border-radius:16px;overflow:hidden">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 12px 12px 20px;border-bottom:1px solid #EAEAEA;flex-wrap:wrap">
+                        <span style="font-size:14px;font-weight:600">{{ b.s.title }}</span>
+                        <button onClick="{{ b.s.copy }}" style="display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;border:0;background:{{ b.s.btnBg }};color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:background 150ms">
+                          <sc-if value="{{ b.s.copied }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round;animation:pbPop 180ms cubic-bezier(.34,1.56,.64,1)"><path d="M20 6 9 17l-5-5"></path></svg>Copié</sc-if>
+                          <sc-if value="{{ b.s.notCopied }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>Copier le script</sc-if>
+                        </button>
+                      </div>
+                      <p style="padding:20px 22px;font-size:17px;font-weight:500;line-height:1.6;white-space:pre-line;text-wrap:pretty">
+                        <sc-for list="{{ b.s.segs }}" as="sg" hint-placeholder-count="1"><sc-if value="{{ sg.ph }}" hint-placeholder-val="{{ false }}"><span style="background:#FFF0F5;color:#C42A63;border-radius:6px;padding:1px 5px;font-weight:600">{{ sg.t }}</span></sc-if><sc-if value="{{ sg.plain }}" hint-placeholder-val="{{ true }}">{{ sg.t }}</sc-if></sc-for>
+                      </p>
+                      <sc-if value="{{ b.s.hasWarn }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;gap:10px;align-items:flex-start;padding:14px 22px;background:#F8F8F7;border-top:1px solid #EAEAEA;font-size:14px;line-height:1.5;color:#525252">
+                          <svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
+                          <span>{{ b.s.warn }}</span>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_checklist }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #EAEAEA;border-radius:16px;overflow:hidden">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 10px 10px 20px;border-bottom:1px solid #EAEAEA">
+                        <span style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:{{ b.countColor }}">{{ b.countLabel }}</span>
+                        <button onClick="{{ b.reset }}" style="display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px;border:0;background:none;border-radius:10px;font-size:13px;font-weight:500;color:#737373;cursor:pointer">
+                          <svg viewBox="0 0 24 24" width="14" height="14" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Réinitialiser
+                        </button>
+                      </div>
+                      <div role="group" aria-label="{{ b.label }}" style="display:flex;flex-direction:column">
+                        <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="5">
+                          <button role="checkbox" aria-checked="{{ it.checked }}" onClick="{{ it.toggle }}" style="display:flex;align-items:center;gap:14px;min-height:52px;padding:12px 20px;border:0;border-top:{{ it.bt }};background:none;text-align:left;cursor:pointer;font-size:16px;line-height:1.45;color:{{ it.color }};transition:color 150ms">
+                            <span style="width:24px;height:24px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1.5px solid {{ it.boxBorder }};background:{{ it.boxBg }};transition:background 150ms,border-color 150ms">
+                              <sc-if value="{{ it.checked }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:#fff;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;animation:pbPop 160ms cubic-bezier(.34,1.56,.64,1)"><path d="M20 6 9 17l-5-5"></path></svg></sc-if>
+                            </span>
+                            <span style="flex:1">{{ it.text }}</span>
+                          </button>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_objections }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #EAEAEA;border-radius:16px;overflow:hidden">
+                      <sc-for list="{{ b.objs }}" as="o" hint-placeholder-count="5">
+                        <div style="border-top:{{ o.bt }}">
+                          <button onClick="{{ o.toggle }}" aria-expanded="{{ o.open }}" style="width:100%;min-height:56px;display:flex;align-items:center;gap:12px;padding:14px 20px;background:none;border:0;text-align:left;cursor:pointer;font-size:16px;font-weight:600;color:#171717">
+                            <span style="flex:1">« {{ o.q }} »</span>
+                            <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:#737373;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;transform:rotate({{ o.rot }});transition:transform 180ms"><path d="m6 9 6 6 6-6"></path></svg>
+                          </button>
+                          <sc-if value="{{ o.open }}" hint-placeholder-val="{{ false }}">
+                            <div style="padding:0 20px 20px;display:flex;flex-direction:column;gap:14px">
+                              <p style="font-size:16px;font-weight:500;line-height:1.6;text-wrap:pretty">{{ o.a }}</p>
+                              <p style="font-size:14px;line-height:1.5;color:#737373"><span style="font-weight:600;color:#171717">Objectif :</span> {{ o.goal }}</p>
+                              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                                <button onClick="{{ o.copy }}" style="display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid #EAEAEA;background:#fff;color:#171717;font-size:14px;font-weight:600;cursor:pointer">
+                                  <sc-if value="{{ o.copied }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:#C42A63;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round;animation:pbPop 180ms cubic-bezier(.34,1.56,.64,1)"><path d="M20 6 9 17l-5-5"></path></svg>Copié</sc-if>
+                                  <sc-if value="{{ o.notCopied }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>Copier la réponse</sc-if>
+                                </button>
+                                <sc-if value="{{ o.draft }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:600;color:#737373;border:1px dashed #D4D4D4;border-radius:999px;padding:4px 10px">Brouillon à valider</span></sc-if>
+                              </div>
+                            </div>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <button onClick="{{ goObjections }}" style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 4px;border:0;background:none;font-size:14px;font-weight:600;color:#C42A63;cursor:pointer">Toutes les objections<svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></button>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_angles }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:10px">
+                      <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="5">
+                        <div style="background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:8px">
+                          <span style="font-size:13px;color:#737373">{{ it.situation }}</span>
+                          <span style="display:flex;align-items:flex-start;gap:8px;font-size:16px;font-weight:600;line-height:1.35"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:#C42A63;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;margin-top:3px"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>{{ it.angle }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_timeline }}" hint-placeholder-val="{{ false }}">
+                    <ol style="list-style:none;margin:0;padding:8px 0;background:#fff;border:1px solid #EAEAEA;border-radius:16px">
+                      <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="4">
+                        <li style="display:grid;grid-template-columns:{{ tlCols }};gap:14px;padding:0 20px">
+                          <span style="font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;padding:16px 0;color:#C42A63">{{ it.time }}</span>
+                          <span style="position:relative;display:flex;justify-content:center">
+                            <span style="position:absolute;top:{{ it.lineTop }};bottom:{{ it.lineBottom }};width:1.5px;background:#EAEAEA"></span>
+                            <span style="position:relative;margin-top:20px;width:12px;height:12px;border-radius:999px;background:#fff;border:2px solid #FF4D8A"></span>
+                          </span>
+                          <span style="font-size:16px;line-height:1.5;padding:14px 0">{{ it.text }}</span>
+                        </li>
+                      </sc-for>
+                    </ol>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_principles }}" hint-placeholder-val="{{ false }}">
+                    <ul style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:10px">
+                      <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="5">
+                        <li style="display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:14px 16px;font-size:15px;line-height:1.45">
+                          <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:#C42A63;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;margin-top:1px"><path d="M20 6 9 17l-5-5"></path></svg>
+                          <span>{{ it.text }}</span>
+                        </li>
+                      </sc-for>
+                    </ul>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_errors }}" hint-placeholder-val="{{ false }}">
+                    <ul style="list-style:none;margin:0;padding:0;background:#fff;border:1px solid #EAEAEA;border-radius:14px;overflow:hidden">
+                      <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="3">
+                        <li style="display:flex;gap:12px;align-items:flex-start;padding:14px 20px;border-top:{{ it.bt }};font-size:16px;line-height:1.5">
+                          <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:#737373;stroke-width:1.75;stroke-linecap:round;flex-shrink:0;margin-top:3px"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+                          <span>{{ it.text }}</span>
+                        </li>
+                      </sc-for>
+                    </ul>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_list }}" hint-placeholder-val="{{ false }}">
+                    <ul style="list-style:none;margin:0;padding:0;background:#fff;border:1px solid #EAEAEA;border-radius:14px;overflow:hidden">
+                      <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="4">
+                        <li style="display:flex;gap:12px;align-items:flex-start;padding:14px 20px;border-top:{{ it.bt }};font-size:16px;line-height:1.5">
+                          <span style="width:6px;height:6px;border-radius:999px;background:#FF4D8A;flex-shrink:0;margin-top:10px"></span>
+                          <span>{{ it.text }}</span>
+                        </li>
+                      </sc-for>
+                    </ul>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_wow }}" hint-placeholder-val="{{ false }}">
+                    <ol style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,136px),1fr));gap:10px">
+                      <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="4">
+                        <li style="display:flex;flex-direction:column;gap:10px;padding:18px;border-radius:14px;background:{{ it.bg }};border:{{ it.border }};color:{{ it.color }}">
+                          <span style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                            <span style="font-size:28px;font-weight:700;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;line-height:1">{{ it.n }}</span>
+                            <sc-if value="{{ it.key }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;background:#fff;color:#C42A63;border-radius:999px;padding:3px 8px">Moment clé</span></sc-if>
+                          </span>
+                          <span style="font-size:15px;line-height:1.45;font-weight:500">{{ it.text }}</span>
+                        </li>
+                      </sc-for>
+                    </ol>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_slots }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #EAEAEA;border-radius:16px;padding:16px;display:grid;grid-template-columns:{{ slotCols }};gap:12px;align-items:center">
+                      <figure style="margin:0;display:flex;flex-direction:column;gap:8px">
+                        <div style="position:relative;width:100%;aspect-ratio:4/3"><image-slot id="wow-demo" shape="rounded" radius="12" placeholder="Capture réelle — compte démo"></image-slot></div>
+                        <figcaption style="font-size:13px;font-weight:600;color:#737373">Compte démo</figcaption>
+                      </figure>
+                      <span aria-hidden="true" style="width:40px;height:40px;border-radius:999px;background:#FF4D8A;color:#fff;display:flex;align-items:center;justify-content:center;justify-self:center;transform:{{ slotArrowRot }}"><svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg></span>
+                      <figure style="margin:0;display:flex;flex-direction:column;gap:8px">
+                        <div style="position:relative;width:100%;aspect-ratio:4/3"><image-slot id="wow-salon" shape="rounded" radius="12" placeholder="Capture réelle — compte du salon"></image-slot></div>
+                        <figcaption style="font-size:13px;font-weight:600;color:#C42A63">Compte personnalisé du salon</figcaption>
+                      </figure>
+                    </div>
+                    <div style="position:relative;width:100%;aspect-ratio:16/9;max-height:360px"><image-slot id="wow-video" shape="rounded" radius="16" placeholder="Emplacement vidéo — la transition démo → compte réel (à venir)"></image-slot></div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_pricing }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#fff;border:1px solid #EAEAEA;border-radius:16px;overflow:hidden">
+                      <div role="table" aria-label="Tarifs" style="display:flex;flex-direction:column">
+                        <div role="row" style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.3fr);gap:12px;padding:12px 20px;background:#F8F8F7;border-bottom:1px solid #EAEAEA;font-size:12px;font-weight:600;color:#737373;letter-spacing:.02em">
+                          <span role="columnheader">Offre</span><span role="columnheader" style="text-align:right">Mensuel</span><span role="columnheader" style="text-align:right">Engagement annuel (prix/mois)</span>
+                        </div>
+                        <sc-for list="{{ pricing }}" as="p" hint-placeholder-count="3">
+                          <div role="row" style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.3fr);gap:12px;align-items:center;min-height:56px;padding:0 20px;border-top:{{ p.bt }};font-variant-numeric:tabular-nums">
+                            <span role="cell" style="font-size:16px;font-weight:600">{{ p.name }}</span>
+                            <span role="cell" style="font-size:16px;text-align:right;color:#737373">{{ p.monthly }}</span>
+                            <span role="cell" style="font-size:17px;font-weight:600;text-align:right">{{ p.annual }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_note }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.5;color:#525252;padding:0 4px">
+                      <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:#737373;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>
+                      <span>{{ b.text }}</span>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_callout }}" hint-placeholder-val="{{ false }}">
+                    <div style="background:#FFF0F5;border:1px solid #FFD0E0;border-radius:16px;padding:24px;font-size:20px;font-weight:600;line-height:1.4;letter-spacing:-0.01em;text-wrap:balance">{{ b.text }}</div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_pending }}" hint-placeholder-val="{{ false }}">
+                    <div style="border:1.5px dashed #D4D4D4;border-radius:16px;padding:22px 24px;display:flex;flex-direction:column;gap:14px">
+                      <span style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#737373">Contenu à fournir</span>
+                      <p style="font-size:16px;line-height:1.55">{{ b.text }}</p>
+                      <sc-if value="{{ b.hasSlots }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-wrap:wrap;gap:8px">
+                          <sc-for list="{{ b.slots }}" as="it" hint-placeholder-count="6">
+                            <span style="font-size:13px;font-weight:500;color:#737373;background:#fff;border:1px solid #EAEAEA;border-radius:999px;padding:6px 12px">{{ it.text }}</span>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                </section>
+              </sc-for>
+
+              <sc-if value="{{ page.hasNav }}" hint-placeholder-val="{{ true }}">
+                <nav data-noprint="" aria-label="Navigation entre étapes" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;padding-top:12px;border-top:1px solid #EAEAEA">
+                  <sc-if value="{{ page.hasPrev }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ page.goPrev }}" style="display:flex;align-items:center;gap:12px;min-height:72px;padding:14px 18px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;cursor:pointer;text-align:left;color:#171717">
+                      <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><path d="m15 18-6-6 6-6"></path></svg>
+                      <span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#737373">Étape précédente</span><span style="font-size:15px;font-weight:600">{{ page.prevTitle }}</span></span>
+                    </button>
+                  </sc-if>
+                  <sc-if value="{{ page.hasNext }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ page.goNext }}" style="display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:72px;padding:14px 18px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;cursor:pointer;text-align:right;color:#171717;grid-column:{{ page.nextCol }}">
+                      <span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;color:#737373">Étape suivante</span><span style="font-size:15px;font-weight:600">{{ page.nextTitle }}</span></span>
+                      <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><path d="m9 18 6-6-6-6"></path></svg>
+                    </button>
+                  </sc-if>
+                </nav>
+              </sc-if>
+            </article>
+          </sc-if>
+
+          <sc-if value="{{ isObjLib }}" hint-placeholder-val="{{ false }}">
+            <article data-screen-label="Objections" style="display:flex;flex-direction:column;gap:24px">
+              <header style="display:flex;flex-direction:column;gap:12px">
+                <span style="font-size:13px;font-weight:500;color:#737373">Accès rapide</span>
+                <h1 style="font-size:{{ h1Size }};font-weight:700;letter-spacing:-0.02em;line-height:1.15">Objections fréquentes</h1>
+                <p style="font-size:17px;line-height:1.55;color:#737373;max-width:640px">Des réponses courtes, naturelles et vérifiables. Ne jamais promettre un nombre de réservations.</p>
+              </header>
+              <div style="display:flex;flex-direction:column;gap:12px">
+                <label style="display:flex;align-items:center;gap:10px;min-height:52px;padding:0 16px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;color:#737373">
+                  <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                  <input type="search" value="{{ objQ }}" onChange="{{ onObjQ }}" placeholder="Ce que dit la gérante…" aria-label="Rechercher une objection" style="flex:1;min-width:0;border:0;outline:none;background:none;font-size:16px;color:#171717;height:48px">
+                </label>
+                <div role="group" aria-label="Catégories" style="display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ objCats }}" as="c" hint-placeholder-count="7">
+                    <button onClick="{{ c.select }}" aria-pressed="{{ c.active }}" style="min-height:44px;padding:0 14px;border-radius:999px;white-space:nowrap;font-size:14px;font-weight:500;cursor:pointer;background:{{ c.bg }};color:{{ c.color }};border:1px solid {{ c.border }};transition:background 150ms,color 150ms">{{ c.label }} <span style="opacity:.7;font-variant-numeric:tabular-nums">{{ c.count }}</span></button>
+                  </sc-for>
+                </div>
+              </div>
+              <sc-if value="{{ objHasResults }}" hint-placeholder-val="{{ true }}">
+                <div style="background:#fff;border:1px solid #EAEAEA;border-radius:16px;overflow:hidden">
+                  <sc-for list="{{ objList }}" as="o" hint-placeholder-count="6">
+                    <div style="border-top:{{ o.bt }}">
+                      <button onClick="{{ o.toggle }}" aria-expanded="{{ o.open }}" style="width:100%;min-height:64px;display:flex;align-items:center;gap:12px;padding:14px 20px;background:none;border:0;text-align:left;cursor:pointer;color:#171717">
+                        <span style="flex:1;display:flex;flex-direction:column;gap:4px">
+                          <span style="font-size:12px;font-weight:500;color:#737373">{{ o.catLabel }}</span>
+                          <span style="font-size:16px;font-weight:600">« {{ o.q }} »</span>
+                        </span>
+                        <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:#737373;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;transform:rotate({{ o.rot }});transition:transform 180ms"><path d="m6 9 6 6 6-6"></path></svg>
+                      </button>
+                      <sc-if value="{{ o.open }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:0 20px 20px;display:flex;flex-direction:column;gap:14px">
+                          <div style="display:flex;flex-direction:column;gap:6px">
+                            <span style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#C42A63">Réponse conseillée</span>
+                            <p style="font-size:16px;font-weight:500;line-height:1.6;text-wrap:pretty">{{ o.a }}</p>
+                          </div>
+                          <p style="font-size:14px;line-height:1.5;color:#737373"><span style="font-weight:600;color:#171717">Objectif :</span> {{ o.goal }}</p>
+                          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                            <button onClick="{{ o.copy }}" style="display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid #EAEAEA;background:#fff;color:#171717;font-size:14px;font-weight:600;cursor:pointer">
+                              <sc-if value="{{ o.copied }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:#C42A63;stroke-width:2.25;stroke-linecap:round;stroke-linejoin:round;animation:pbPop 180ms cubic-bezier(.34,1.56,.64,1)"><path d="M20 6 9 17l-5-5"></path></svg>Copié</sc-if>
+                              <sc-if value="{{ o.notCopied }}" hint-placeholder-val="{{ true }}"><svg viewBox="0 0 24 24" width="16" height="16" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>Copier la réponse</sc-if>
+                            </button>
+                            <sc-if value="{{ o.draft }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:600;color:#737373;border:1px dashed #D4D4D4;border-radius:999px;padding:4px 10px">Brouillon à valider</span></sc-if>
+                          </div>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{ objEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:32px 24px;text-align:center;border:1.5px dashed #D4D4D4;border-radius:16px;font-size:15px;color:#737373">Aucune objection ne correspond. Essaie un autre mot.</div>
+              </sc-if>
+            </article>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ false }}">
+          <aside data-noprint="" aria-label="Sur cette page" style="width:220px;flex-shrink:0;position:sticky;top:32px;align-self:flex-start;display:flex;flex-direction:column;gap:28px">
+            <sc-if value="{{ hasToc }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#737373;padding:0 10px 6px">Sur cette page</span>
+                <sc-for list="{{ toc }}" as="t" hint-placeholder-count="5">
+                  <button onClick="{{ t.go }}" style="display:flex;align-items:center;gap:8px;min-height:36px;padding:6px 10px;border:0;background:none;border-radius:8px;text-align:left;font-size:13px;line-height:1.35;color:#525252;cursor:pointer" style-hover="background:#fff;color:#171717">{{ t.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div style="display:flex;flex-direction:column;gap:8px;background:#fff;border:1px solid #EAEAEA;border-radius:14px;padding:16px">
+              <span style="font-size:13px;font-weight:600">En rendez-vous ?</span>
+              <span style="font-size:13px;line-height:1.45;color:#737373">Retrouve une réponse en quelques secondes.</span>
+              <button onClick="{{ goObjections }}" style="min-height:40px;border:0;border-radius:999px;background:#FF4D8A;color:#fff;font-size:13px;font-weight:600;cursor:pointer;margin-top:4px">Objections</button>
+              <button onClick="{{ openSearch }}" style="min-height:40px;border:1px solid #EAEAEA;border-radius:999px;background:#fff;color:#171717;font-size:13px;font-weight:600;cursor:pointer">Rechercher · ⌘K</button>
+            </div>
+          </aside>
+        </sc-if>
+      </div>
+    </main>
+  </div>
+
+  <sc-if value="{{ showTop }}" hint-placeholder-val="{{ false }}">
+    <button data-noprint="" onClick="{{ toTop }}" aria-label="Retour en haut" style="position:fixed;right:20px;bottom:20px;z-index:20;width:48px;height:48px;border-radius:999px;background:#fff;border:1px solid #EAEAEA;box-shadow:0 4px 12px rgba(23,23,23,.08);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#171717">
+      <svg viewBox="0 0 24 24" width="20" height="20" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round"><path d="m5 12 7-7 7 7M12 19V5"></path></svg>
+    </button>
+  </sc-if>
+
+  <sc-if value="{{ searchOpen }}" hint-placeholder-val="{{ false }}">
+    <div data-noprint="" role="dialog" aria-modal="true" aria-label="Recherche" style="position:fixed;inset:0;z-index:100;display:flex;justify-content:center;align-items:flex-start;padding:10vh 16px 16px">
+      <div onClick="{{ closeSearch }}" style="position:absolute;inset:0;background:rgba(23,23,23,.36)"></div>
+      <div style="position:relative;width:100%;max-width:640px;background:#fff;border-radius:16px;border:1px solid #EAEAEA;box-shadow:0 24px 48px rgba(23,23,23,.16);overflow:hidden;display:flex;flex-direction:column;max-height:76vh">
+        <div style="display:flex;align-items:center;gap:10px;padding:0 10px 0 18px;border-bottom:1px solid #EAEAEA;color:#737373">
+          <svg viewBox="0 0 24 24" width="18" height="18" style="fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          <input ref="{{ searchRef }}" type="search" value="{{ q }}" onChange="{{ onQ }}" onKeyDown="{{ onSearchKey }}" placeholder="Rechercher un script, une objection, une méthode…" aria-label="Rechercher" style="flex:1;min-width:0;height:60px;border:0;outline:none;background:none;font-size:17px;color:#171717">
+          <button onClick="{{ closeSearch }}" aria-label="Fermer" style="min-height:36px;padding:0 10px;border:1px solid #EAEAEA;border-radius:8px;background:#fff;font-size:12px;font-weight:600;color:#737373;cursor:pointer">Échap</button>
+        </div>
+        <div style="overflow-y:auto;padding:8px">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#737373;padding:8px 12px">{{ searchHeading }}</div>
+          <sc-for list="{{ results }}" as="r" hint-placeholder-count="5">
+            <button onClick="{{ r.go }}" style="width:100%;display:flex;align-items:flex-start;gap:12px;min-height:52px;padding:10px 12px;border:0;background:{{ r.bg }};border-radius:10px;text-align:left;cursor:pointer;color:#171717" style-hover="background:#F8F8F7">
+              <span style="font-size:11px;font-weight:600;color:#C42A63;background:#FFF0F5;border-radius:6px;padding:3px 7px;flex-shrink:0;margin-top:1px;min-width:72px;text-align:center">{{ r.kind }}</span>
+              <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                <span style="font-size:15px;font-weight:600;line-height:1.35">{{ r.title }}</span>
+                <span style="font-size:13px;color:#737373;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">{{ r.snippet }}</span>
+              </span>
+            </button>
+          </sc-for>
+          <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:24px 12px;font-size:15px;color:#737373">Aucun résultat. Essaie « Planity », « prix » ou « Instagram ».</div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showDrafts&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;label&quot;: &quot;Marquer les réponses « Brouillon à valider »&quot;}}">
+const KEY = 'glaura-playbook-v1';
+const PRICING = [
+  { name: 'Essentiel', monthly: '29 €', annual: '14,90 €' },
+  { name: 'Solo', monthly: '59 €', annual: '39 €' },
+  { name: 'Salon Pro', monthly: '99 €', annual: '79 €' }
+];
+const CATS = [
+  { id: 'equipe', label: 'Déjà équipé' },
+  { id: 'prix', label: 'Prix et abonnement' },
+  { id: 'temps', label: 'Manque de temps' },
+  { id: 'reflechir', label: 'Besoin de réfléchir' },
+  { id: 'doutes', label: 'Doutes sur les résultats' },
+  { id: 'tech', label: 'Questions techniques' }
+];
+const OBJ = [
+  { id: 'o-quoi', cat: 'tech', draft: true, q: "C'est quoi Glaura ?", a: "Glaura est une application où les clientes découvrent les salons à travers leurs vidéos et réservent directement. Le plus parlant, c'est de vous le montrer sur place : cinq minutes suffisent. Jeudi vers 14 h, ça vous irait ?", goal: "Obtenir le rendez-vous sans faire la démonstration au téléphone." },
+  { id: 'o-planity', cat: 'equipe', draft: true, q: "J'ai déjà Planity.", a: "Très bien, vous avez déjà un bon outil de réservation. Glaura sert surtout à transformer vos vidéos en nouvelles clientes, en complément de ce que vous utilisez. Je vous montre en cinq minutes comment ça s'articule ?", goal: "Déplacer la discussion de l'outil de réservation vers l'acquisition de clientes." },
+  { id: 'o-treatwell', cat: 'equipe', draft: true, q: "J'utilise déjà Treatwell.", a: "Parfait, vous êtes déjà visible en ligne. Ce que je veux vous montrer, c'est comment vos vidéos peuvent vous amener des clientes et les faire revenir. Cinq minutes jeudi, ça vous va ?", goal: "Positionner Glaura sur l'acquisition et la fidélisation." },
+  { id: 'o-temps', cat: 'temps', draft: true, q: "Je n'ai pas le temps.", a: "Je comprends, vos journées sont pleines. C'est pour ça que je vous propose cinq minutes seulement, au moment qui vous arrange. Plutôt en début ou en fin de journée ?", goal: "Réduire l'engagement perçu et proposer un choix de créneau." },
+  { id: 'o-message', cat: 'reflechir', draft: true, q: "Envoyez-moi un message.", a: "Avec plaisir, je vous envoie la confirmation par message. Le plus simple reste de vous montrer votre salon déjà préparé : cinq minutes sur place. Jeudi 14 h, c'est possible ?", goal: "Transformer la demande d'information en rendez-vous." },
+  { id: 'o-prix', cat: 'prix', draft: true, q: "Ça coûte combien ?", a: `Les offres commencent à ${PRICING[0].annual} par mois avec un engagement annuel. Avant de parler de prix, je préfère vous montrer ce que ça peut apporter à votre salon. Je passe jeudi ?`, goal: "Donner une réponse honnête, puis revenir au rendez-vous." },
+  { id: 'o-cher', cat: 'prix', draft: true, q: "C'est trop cher pour moi.", a: "Je comprends. Regardons ensemble ce dont vous avez vraiment besoin : il existe plusieurs offres, et l'engagement annuel réduit le prix mensuel. On choisit celle qui correspond à votre salon.", goal: "Identifier l'offre adaptée plutôt que négocier." },
+  { id: 'o-reflechir', cat: 'reflechir', draft: true, q: "Je vais réfléchir.", a: "Bien sûr. Qu'est-ce qui vous fait hésiter aujourd'hui ? Si c'est une question de moment, on fixe une date pour que je repasse.", goal: "Identifier l'objection réelle et fixer une nouvelle date de passage." },
+  { id: 'o-resultats', cat: 'doutes', draft: true, q: "Est-ce que ça va vraiment m'apporter des clientes ?", a: "Je ne peux pas vous promettre un nombre de réservations. Ce que je peux vous montrer, c'est comment vos vidéos deviennent réservables et comment les relances font revenir vos clientes. Vous jugerez par vous-même.", goal: "Rester crédible : aucune promesse chiffrée." },
+  { id: 'o-config', cat: 'tech', draft: true, q: "C'est compliqué à mettre en place ?", a: "Votre compte est déjà préparé par notre équipe : prestations, tarifs et vidéos sont intégrés. Il reste à le configurer ensemble, et ça se fait pendant le rendez-vous.", goal: "Lever la crainte de la charge de travail." }
+];
+const CH = [
+  { id: 'c1', num: '01', title: 'Comprendre nos clientes', goal: "Connaître le quotidien des patronnes de salon pour leur parler de ce qui compte pour elles.", read: '2 min', blocks: [
+    { type: 'quote', text: "Les patronnes de salons sont occupées. Arrive préparé, identifie leur problème principal et montre immédiatement comment Glaura peut les aider." },
+    { type: 'pending', text: "Le contenu de ce chapitre doit être rédigé et validé par le fondateur. Il suivra la structure commune à toutes les étapes :", slots: ["A. Ce qu'il faut obtenir", 'B. La méthode', "C. L'astuce du fondateur", 'D. Exemple concret', 'E. Les erreurs à éviter', 'F. Checklist'] }
+  ] },
+  { id: 'c2', num: '02', title: 'Prospection téléphonique', hero: 'Vends le rendez-vous, pas Glaura.', goal: 'Obtenir un rendez-vous de 5 minutes au salon.', read: '4 min', blocks: [
+    { type: 'obtain', text: 'Un rendez-vous confirmé et enregistré dans le CRM.' },
+    { type: 'checklist', id: 'avant-appel', label: "Avant d'appeler", items: ["J'ai ouvert la fiche du salon dans le CRM.", "J'ai consulté son Instagram.", "J'ai identifié une prestation ou vidéo intéressante.", "J'ai regardé ses disponibilités sur son outil de réservation.", "J'ai préparé un créneau à proposer."] },
+    { type: 'scenarios', scripts: [
+      { id: 's-insta', tab: 'Instagram', title: 'Scénario 1 — Instagram', text: "Bonjour, j'ai découvert votre Instagram et j'ai beaucoup aimé vos vidéos de [prestation]. Vous faites déjà le plus difficile : attirer l'attention. Je souhaiterais passer vous montrer comment transformer davantage de vues en rendez-vous. Vous seriez disponible jeudi ?" },
+      { id: 's-quartier', tab: 'Passage dans le quartier', title: 'Scénario 2 — Passage dans le quartier', text: "Bonjour, c'est bien le salon [Nom], au [Adresse] ?\n\nJe suis [Prénom] de Glaura. Je passe justement jeudi dans votre quartier pour configurer le compte Glaura d'un autre salon.\n\nJ'ai regardé votre Instagram, vos réalisations sont très réussies. Je voulais en profiter pour passer vous montrer ce qu'on pourrait faire pour votre salon. Vous seriez disponible jeudi vers 14 h ?", warn: "Ne mentionner un salon voisin que si la visite est réelle et que son nom peut être communiqué." }
+    ] },
+    { type: 'objections', ids: ['o-quoi', 'o-planity', 'o-temps', 'o-message', 'o-prix'] },
+    { type: 'callout', text: 'Un appel réussi = un rendez-vous confirmé et enregistré dans le CRM.' }
+  ] },
+  { id: 'c3', num: '03', title: 'Préparer le rendez-vous', goal: "Arriver avec le compte du salon déjà prêt et un angle commercial choisi.", read: '3 min', blocks: [
+    { type: 'quote', text: "Ne viens jamais présenter un logiciel. Viens montrer au salon ce qu'on a déjà préparé pour lui." },
+    { type: 'obtain', text: 'Un compte salon prêt à montrer et un angle à tester.' },
+    { type: 'checklist', id: 'prep-rdv', label: 'Checklist de préparation', items: ['Compte Glaura créé par le support.', 'Prestations et tarifs vérifiés.', 'Vidéos et réalisations intégrées.', 'Démonstration préparée.', 'Problème principal probable identifié.', 'Angle commercial sélectionné.'] },
+    { type: 'angles', label: 'Situation du salon → angle à tester', items: [
+      { situation: 'Utilise Planity', angle: 'Acquisition et conversion' },
+      { situation: 'Utilise Treatwell', angle: 'Acquisition et fidélisation' },
+      { situation: 'Planity + Treatwell', angle: 'Synchronisation des agendas' },
+      { situation: 'Instagram actif', angle: 'Vidéos réservables et Laura' },
+      { situation: 'Clientèle existante', angle: 'Relances marketing' }
+    ] },
+    { type: 'note', text: 'Ces angles sont des hypothèses à valider pendant le rendez-vous.' }
+  ] },
+  { id: 'c4', num: '04', title: 'Démonstration express', hero: "5 minutes pour créer l'intérêt.", goal: 'Montrer comment Glaura répond au problème principal du salon, sans tout présenter.', read: '3 min', blocks: [
+    { type: 'obtain', text: "L'intérêt de la gérante et son accord pour la suite." },
+    { type: 'timeline', label: 'Le déroulé', items: [
+      { time: '0:00–0:30', text: 'Créer le lien et remercier.' },
+      { time: '0:30–1:30', text: 'Aborder le problème prioritaire.' },
+      { time: '1:30–3:30', text: 'Montrer la solution sur le compte démo.' },
+      { time: '3:30–5:00', text: "Vérifier l'intérêt et présenter la suite." }
+    ] },
+    { type: 'principles', label: 'Les principes', items: ['Ne jamais faire un interrogatoire.', "S'adapter aux interruptions.", 'Montrer avant d\'expliquer longuement.', 'Ne pas présenter toutes les fonctionnalités.', 'Respecter les clientes et les prestations en cours.'] },
+    { type: 'note', text: 'Si la gérante est réellement disponible et intéressée, tu peux développer le rendez-vous.' }
+  ] },
+  { id: 'c5', num: '05', title: 'Effet waouh', hero: 'Son salon est déjà sur Glaura. Montre-lui.', goal: 'Faire passer la patronne du compte démo à son propre salon, déjà configuré.', read: '2 min', blocks: [
+    { type: 'wow', label: 'La séquence', key: 1, items: ['Démonstration de la solution au problème principal sur un compte démo.', 'Passage au compte personnalisé du salon.', 'Connexion de la patronne et configuration avec elle.', 'Présentation des fonctionnalités supplémentaires, notamment le marketing et les relances automatiques.'] },
+    { type: 'slots', label: 'La transition : du compte démo au compte réel' },
+    { type: 'script', id: 's-waouh', label: 'Exemple de formulation', title: 'Au moment du passage au compte réel', text: "Maintenant, regardez : avec l'équipe, nous avons déjà préparé votre salon. Vos prestations, vos tarifs et vos vidéos sont intégrés." },
+    { type: 'note', text: "Utiliser uniquement de véritables captures de l'interface Glaura, jamais des écrans fictifs." }
+  ] },
+  { id: 'c6', num: '06', title: 'Closing & suivi', hero: 'Fais de la signature la suite naturelle de la configuration.', goal: "Activer l'abonnement pendant le rendez-vous, ou fixer la suite.", read: '4 min', blocks: [
+    { type: 'method', items: ['Valider la valeur perçue de la fonctionnalité principale.', 'Montrer les fonctionnalités complémentaires pertinentes.', 'Expliquer ce qui nécessite un abonnement.', "Présenter le tarif et l'engagement.", "Proposer l'activation immédiate."] },
+    { type: 'script', id: 's-closing', label: 'Script de closing', title: 'Proposer l\'activation', text: "Votre compte est déjà préparé. On peut maintenant activer les fonctionnalités dont vous avez besoin, notamment les relances et les campagnes marketing. Pour ça, il faut activer votre abonnement. On le fait ensemble ?" },
+    { type: 'list', label: 'Si la patronne souhaite réfléchir', items: ['Identifier son objection réelle.', 'Répondre sans insister inutilement.', 'Fixer une nouvelle date de passage.', 'Enregistrer le suivi dans le CRM.'] },
+    { type: 'tip', tipLabel: 'Rappel pratique', text: 'Une petite attention lors d\'une nouvelle visite peut aider à entretenir une bonne relation.' },
+    { type: 'pricing', label: 'Tarifs actuels' }
+  ] },
+  { id: 'c7', num: '07', title: 'Activation & recommandations', hero: "Une signature n'est pas la fin de la vente.", goal: 'Vérifier que le salon est actif sur Glaura et obtenir des recommandations.', read: '2 min', blocks: [
+    { type: 'checklist', id: 'activation', label: 'Checklist d\'activation', items: ['Abonnement souscrit et paiement effectué.', 'Lien Glaura principal sur Instagram et les autres réseaux sociaux.', 'Bouton Google de réservation configuré.', 'Blocages éventuels résolus avec le support.', "Statut d'activation renseigné dans le CRM.", 'Recommandations demandées.'] },
+    { type: 'script', id: 's-reco', label: 'Demander une recommandation', title: 'En fin de rendez-vous', text: "Vous connaissez d'autres coiffeuses ou professionnelles de beauté qui pourraient être intéressées par Glaura ?" },
+    { type: 'note', text: 'Privilégier les mises en relation directes et enregistrer leur suivi.' }
+  ] }
+];
+const LABELS = { obtain: "Ce qu'il faut obtenir", method: 'La méthode', errors: 'Les erreurs à éviter', checklist: 'Checklist', scenarios: 'Les accroches qui fonctionnent', objections: 'Objections rapides', timeline: 'Le déroulé', pricing: 'Tarifs' };
+const FORMATION_ONLY = { method: 1, tip: 1, errors: 1, principles: 1, quote: 1 };
+const QUICK = [
+  { id: 'scripts', title: 'Scripts téléphoniques' },
+  { id: 'objections', title: 'Objections fréquentes' },
+  { id: 'checklists', title: 'Checklists' },
+  { id: 'regles', title: "Les 10 règles d'or" }
+];
+const norm = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const cut = (s, n) => s.length > n ? s.slice(0, n - 1).trim() + '…' : s;
+
+function loadState() {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+  return { route: s.route || 'home', checks: s.checks || {}, read: s.read || {}, mode: s.mode || 'formation' };
+}
+
+class Component extends DCLogic {
+  state = Object.assign(loadState(), { vw: window.innerWidth, scrollPct: 0, scrolled: false, searchOpen: false, q: '', navOpen: false, openObj: null, scenario: 0, copied: null, objQ: '', objCat: 'all' });
+  mainRef = React.createRef();
+  searchRef = React.createRef();
+
+  componentDidMount() {
+    this.onResize = () => this.setState({ vw: window.innerWidth });
+    this.onKey = e => {
+      const typing = /input|textarea/i.test((e.target && e.target.tagName) || '');
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.openSearch(); }
+      else if (e.key === '/' && !typing) { e.preventDefault(); this.openSearch(); }
+      else if (e.key === 'Escape') this.setState({ searchOpen: false, navOpen: false });
+    };
+    window.addEventListener('resize', this.onResize);
+    window.addEventListener('keydown', this.onKey);
+    this.checkShort();
+  }
+  componentWillUnmount() {
+    window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('keydown', this.onKey);
+  }
+  componentDidUpdate(_, prev) {
+    const s = this.state;
+    if (prev.route !== s.route || prev.checks !== s.checks || prev.read !== s.read || prev.mode !== s.mode) {
+      try { localStorage.setItem(KEY, JSON.stringify({ route: s.route, checks: s.checks, read: s.read, mode: s.mode })); } catch (e) {}
+    }
+    if (prev.route !== s.route) {
+      if (this.mainRef.current) this.mainRef.current.scrollTop = 0;
+      this.checkShort();
+    }
+  }
+  checkShort() {
+    setTimeout(() => {
+      const m = this.mainRef.current;
+      if (m && m.scrollHeight <= m.clientHeight + 40) this.markRead();
+    }, 300);
+  }
+  markRead() {
+    const r = this.state.route;
+    if (/^c\d$/.test(r) && !this.state.read[r]) this.setState(s => ({ read: Object.assign({}, s.read, { [r]: true }) }));
+  }
+  go(route, extra) {
+    this.setState(Object.assign({ route, navOpen: false, searchOpen: false, openObj: null, scenario: 0, scrollPct: 0, scrolled: false }, extra || {}));
+  }
+  openSearch() {
+    this.setState({ searchOpen: true, q: '' }, () => setTimeout(() => this.searchRef.current && this.searchRef.current.focus(), 30));
+  }
+  copy(id, text) {
+    const done = () => { this.setState({ copied: id }); clearTimeout(this.ct); this.ct = setTimeout(() => this.setState({ copied: null }), 1600); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => { this.fallbackCopy(text); done(); });
+    else { this.fallbackCopy(text); done(); }
+  }
+  fallbackCopy(text) {
+    const t = document.createElement('textarea'); t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select(); try { document.execCommand('copy'); } catch (e) {} t.remove();
+  }
+  scrollToId(id) {
+    const m = this.mainRef.current, el = document.getElementById(id);
+    if (!m || !el) return;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    m.scrollTo({ top: el.getBoundingClientRect().top - m.getBoundingClientRect().top + m.scrollTop - 24, behavior: reduce ? 'auto' : 'smooth' });
+  }
+  toggleCheck(k) { this.setState(s => ({ checks: Object.assign({}, s.checks, { [k]: !s.checks[k] }) })); }
+  resetList(id, n) {
+    this.setState(s => { const c = Object.assign({}, s.checks); for (let i = 0; i < n; i++) delete c[id + ':' + i]; return { checks: c }; });
+  }
+
+  scriptView(id, title, text, warn) {
+    const copied = this.state.copied === id;
+    return {
+      title, warn: warn || '', hasWarn: !!warn, copied, notCopied: !copied,
+      btnBg: copied ? '#171717' : '#FF4D8A',
+      copy: () => this.copy(id, text),
+      segs: text.split(/(\[[^\]]+\])/).filter(Boolean).map((t, k) => ({ key: k, t, ph: t[0] === '[', plain: t[0] !== '[' }))
+    };
+  }
+  objView(o, i) {
+    const open = this.state.openObj === o.id, copied = this.state.copied === o.id;
+    return {
+      key: o.id, q: o.q, a: o.a, goal: o.goal, open, rot: open ? '180deg' : '0deg', bt: i ? '1px solid #EAEAEA' : '0',
+      catLabel: (CATS.find(c => c.id === o.cat) || {}).label,
+      draft: !!o.draft && (this.props.showDrafts ?? true), copied, notCopied: !copied,
+      toggle: () => this.setState(s => ({ openObj: s.openObj === o.id ? null : o.id })),
+      copy: () => this.copy(o.id, o.a)
+    };
+  }
+  blockView(b, i, letter) {
+    const s = this.state;
+    const label = b.label !== undefined ? b.label : LABELS[b.type];
+    const v = { key: b.type + i, anchor: 'blk-' + i, label: label || '', hasLabel: !!label, letter: letter || '', hasLetter: !!letter };
+    v['is_' + b.type] = true;
+    const bt = k => (k ? '1px solid #EAEAEA' : '0');
+    if (b.text) v.text = b.text;
+    if (b.type === 'method') v.items = b.items.map((t, k) => ({ key: k, n: k + 1, text: t, bt: bt(k) }));
+    if (b.type === 'errors' || b.type === 'list' || b.type === 'principles') v.items = b.items.map((t, k) => ({ key: k, text: t, bt: bt(k) }));
+    if (b.type === 'tip') v.tipLabel = b.tipLabel || "L'astuce du fondateur";
+    if (b.type === 'script') v.s = this.scriptView(b.id, b.title, b.text, b.warn);
+    if (b.type === 'scenarios') {
+      const idx = Math.min(s.scenario, b.scripts.length - 1), a = b.scripts[idx];
+      v.tabs = b.scripts.map((sc, k) => ({ key: sc.id, label: sc.tab, active: k === idx, bg: k === idx ? '#171717' : 'transparent', color: k === idx ? '#fff' : '#525252', select: () => this.setState({ scenario: k }) }));
+      v.s = this.scriptView(a.id, a.title, a.text, a.warn);
+    }
+    if (b.type === 'checklist') {
+      const items = b.items.map((t, k) => {
+        const key = b.id + ':' + k, checked = !!s.checks[key];
+        return { key, text: t, checked, bt: bt(k), color: checked ? '#737373' : '#171717', boxBg: checked ? '#FF4D8A' : '#fff', boxBorder: checked ? '#FF4D8A' : '#CFCFCF', toggle: () => this.toggleCheck(key) };
+      });
+      const n = items.filter(x => x.checked).length;
+      v.items = items;
+      v.countLabel = n === items.length ? `Tout est prêt · ${n}/${items.length}` : `${n}/${items.length} vérifiés`;
+      v.countColor = n === items.length ? '#C42A63' : '#171717';
+      v.reset = () => this.resetList(b.id, items.length);
+    }
+    if (b.type === 'objections') v.objs = b.ids.map(id => OBJ.find(o => o.id === id)).map((o, k) => this.objView(o, k));
+    if (b.type === 'angles') v.items = b.items.map((x, k) => Object.assign({ key: k }, x));
+    if (b.type === 'timeline') v.items = b.items.map((x, k, arr) => ({ key: k, time: x.time, text: x.text, lineTop: k === 0 ? '24px' : '0', lineBottom: k === arr.length - 1 ? 'calc(100% - 24px)' : '0' }));
+    if (b.type === 'wow') v.items = b.items.map((t, k) => { const key = k === b.key; return { key, n: '0' + (k + 1), text: t, bg: key ? '#FF4D8A' : '#fff', color: key ? '#fff' : '#171717', border: key ? '1px solid #FF4D8A' : '1px solid #EAEAEA' }; });
+    if (b.type === 'pending') { v.slots = (b.slots || []).map((t, k) => ({ key: k, text: t })); v.hasSlots = v.slots.length > 0; }
+    return v;
+  }
+  pageData(route) {
+    const idx = CH.findIndex(c => c.id === route);
+    if (idx >= 0) {
+      const c = CH[idx], prev = CH[idx - 1], next = CH[idx + 1];
+      return { screenLabel: c.num + ' ' + c.title, hasNum: true, num: c.num, eyebrow: c.title, hasRead: true, read: c.read, isRead: !!this.state.read[c.id], h1: c.hero || c.title, goal: c.goal, raw: c.blocks, letters: true,
+        hasNav: true, hasPrev: !!prev, hasNext: !!next, prevTitle: prev ? prev.title : '', nextTitle: next ? next.title : '', nextCol: prev ? 'auto' : '-2 / -1',
+        goPrev: () => prev && this.go(prev.id), goNext: () => next && this.go(next.id) };
+    }
+    const base = { hasNum: false, hasRead: false, isRead: false, hasNav: false, eyebrow: 'Accès rapide', letters: false };
+    if (route === 'scripts') {
+      const raw = [];
+      CH.forEach(c => c.blocks.forEach(b => {
+        if (b.type === 'scenarios') b.scripts.forEach(sc => raw.push({ type: 'script', id: sc.id, title: sc.title, text: sc.text, warn: sc.warn, label: c.num + ' · ' + c.title }));
+        if (b.type === 'script') raw.push(Object.assign({}, b, { label: c.num + ' · ' + c.title }));
+      }));
+      return Object.assign(base, { screenLabel: 'Scripts', h1: 'Scripts', goal: 'Les formulations validées, prêtes à copier. Les champs entre crochets sont à personnaliser.', raw });
+    }
+    if (route === 'checklists') {
+      const raw = [];
+      CH.forEach(c => c.blocks.forEach(b => { if (b.type === 'checklist') raw.push(Object.assign({}, b, { label: c.num + ' · ' + b.label })); }));
+      return Object.assign(base, { screenLabel: 'Checklists', h1: 'Checklists', goal: 'Toutes les vérifications du playbook, de l\'appel à l\'activation.', raw });
+    }
+    if (route === 'regles') {
+      return Object.assign(base, { screenLabel: 'Règles d\'or', h1: "Les 10 règles d'or", goal: 'Les principes à garder en tête à chaque rendez-vous.', raw: [{ type: 'pending', text: "Les 10 règles d'or doivent être rédigées et validées par le fondateur avant publication." }] });
+    }
+    return null;
+  }
+  searchIndex() {
+    if (this._idx) return this._idx;
+    const idx = [];
+    CH.forEach(c => {
+      idx.push({ kind: 'Étape ' + c.num, title: c.title, snippet: c.hero || c.goal, hay: norm([c.title, c.hero, c.goal].join(' ')), route: c.id });
+      c.blocks.forEach(b => {
+        if (b.type === 'scenarios') b.scripts.forEach(sc => idx.push({ kind: 'Script', title: sc.title, snippet: sc.text, hay: norm(sc.title + ' ' + sc.text), route: c.id }));
+        if (b.type === 'script') idx.push({ kind: 'Script', title: b.label, snippet: b.text, hay: norm(b.label + ' ' + b.title + ' ' + b.text), route: c.id });
+        if (b.type === 'checklist') idx.push({ kind: 'Checklist', title: b.label, snippet: b.items.join(' · '), hay: norm(b.label + ' ' + b.items.join(' ')), route: c.id });
+        if (b.type === 'angles') b.items.forEach(a => idx.push({ kind: 'Angle', title: a.situation + ' → ' + a.angle, snippet: c.title, hay: norm(a.situation + ' ' + a.angle), route: c.id }));
+        if (b.type === 'pricing') idx.push({ kind: 'Tarifs', title: 'Tarifs actuels', snippet: PRICING.map(p => p.name + ' ' + p.annual).join(' · '), hay: norm('tarifs prix abonnement offre ' + PRICING.map(p => p.name).join(' ')), route: c.id });
+        if (b.type === 'method' || b.type === 'timeline' || b.type === 'principles' || b.type === 'wow' || b.type === 'list') {
+          const txt = b.items.map(x => typeof x === 'string' ? x : x.time + ' ' + x.text).join(' · ');
+          idx.push({ kind: 'Méthode', title: (b.label || LABELS[b.type]) + ' — ' + c.title, snippet: txt, hay: norm(txt + ' ' + (b.label || '')), route: c.id });
+        }
+      });
+    });
+    OBJ.forEach(o => idx.push({ kind: 'Objection', title: '« ' + o.q + ' »', snippet: o.a, hay: norm(o.q + ' ' + o.a + ' ' + (CATS.find(c => c.id === o.cat) || {}).label), route: 'objections', obj: o.id }));
+    return (this._idx = idx);
+  }
+
+  renderVals() {
+    const s = this.state, vw = s.vw;
+    const compact = vw < 900, desktop = vw >= 1280, small = vw < 600;
+    const route = s.route;
+    const isHome = route === 'home', isObjLib = route === 'objections';
+    const page = (!isHome && !isObjLib) ? this.pageData(route) : null;
+    const navStyle = active => ({ bg: active ? '#FFF0F5' : 'transparent', color: active ? '#C42A63' : '#171717', weight: active ? 600 : 500, numColor: active ? '#C42A63' : '#737373' });
+
+    let blocks = [], toc = [];
+    if (page) {
+      let letter = 0;
+      blocks = page.raw.map((b, i) => ({ b, i }))
+        .filter(x => s.mode === 'formation' || !FORMATION_ONLY[x.b.type])
+        .map(({ b, i }) => {
+          const label = b.label !== undefined ? b.label : LABELS[b.type];
+          const L = page.letters && label ? String.fromCharCode(65 + letter++) : '';
+          return this.blockView(b, i, L);
+        });
+      toc = blocks.filter(b => b.hasLabel).map(b => ({ key: b.anchor, label: b.label, go: () => this.scrollToId(b.anchor) }));
+    }
+
+    const qn = norm(s.objQ.trim());
+    const catCounts = {};
+    OBJ.forEach(o => { if (!qn || norm(o.q + ' ' + o.a).includes(qn)) catCounts[o.cat] = (catCounts[o.cat] || 0) + 1; });
+    const objFiltered = OBJ.filter(o => (s.objCat === 'all' || o.cat === s.objCat) && (!qn || norm(o.q + ' ' + o.a).includes(qn)));
+    const objCats = [{ id: 'all', label: 'Toutes' }].concat(CATS).map(c => {
+      const active = s.objCat === c.id;
+      const count = c.id === 'all' ? Object.values(catCounts).reduce((a, n) => a + n, 0) : (catCounts[c.id] || 0);
+      return { key: c.id, label: c.label, count, active, bg: active ? '#171717' : '#fff', color: active ? '#fff' : '#171717', border: active ? '#171717' : '#EAEAEA', select: () => this.setState({ objCat: c.id, openObj: null }) };
+    });
+
+    let results = [], searchHeading = 'Accès directs';
+    const q = norm(s.q.trim());
+    if (q) {
+      const toks = q.split(/\s+/);
+      results = this.searchIndex().filter(it => toks.every(t => it.hay.includes(t))).slice(0, 12);
+      searchHeading = results.length + ' résultat' + (results.length > 1 ? 's' : '');
+    } else {
+      results = [
+        { kind: 'Script', title: 'Accroches téléphoniques', snippet: 'Instagram · Passage dans le quartier', route: 'c2' },
+        { kind: 'Objection', title: 'Objections fréquentes', snippet: 'Planity, prix, manque de temps…', route: 'objections' },
+        { kind: 'Checklist', title: 'Préparer le rendez-vous', snippet: 'Compte, prestations, angle commercial', route: 'c3' },
+        { kind: 'Tarifs', title: 'Tarifs actuels', snippet: PRICING.map(p => p.name + ' ' + p.annual).join(' · '), route: 'c6' }
+      ];
+    }
+    results = results.map((r, k) => Object.assign({}, r, { key: k, snippet: cut(r.snippet || '', 140), bg: k === 0 && q ? '#F8F8F7' : 'transparent', go: () => r.obj ? this.go('objections', { openObj: r.obj, objQ: '', objCat: 'all' }) : this.go(r.route) }));
+    this._first = results[0];
+
+    const readCount = CH.filter(c => s.read[c.id]).length;
+    const current = CH.find(c => c.id === route) || QUICK.find(x => x.id === route);
+
+    return {
+      compact, isDesktop: desktop, isHome, isObjLib, isPage: !!page,
+      sbPos: compact ? 'fixed' : 'relative', sbW: compact ? '280px' : (desktop ? '248px' : '220px'),
+      sbTransform: compact && !s.navOpen ? 'translateX(-100%)' : 'none',
+      sbShadow: compact && s.navOpen ? '0 12px 32px rgba(23,23,23,.12)' : 'none',
+      navScrim: compact && s.navOpen,
+      pad: small ? '20px 16px 72px' : (compact ? '24px 24px 80px' : (desktop ? '40px 48px 96px' : '32px 24px 88px')),
+      heroPad: small ? '22px 20px' : '32px 32px',
+      heroSize: small ? '24px' : '30px', h1Size: small ? '27px' : '34px',
+      tlCols: small ? '84px 16px minmax(0,1fr)' : '104px 16px minmax(0,1fr)',
+      slotCols: small ? 'minmax(0,1fr)' : 'minmax(0,1fr) auto minmax(0,1fr)', slotArrowRot: small ? 'rotate(90deg)' : 'none',
+      topbarLabel: current ? (current.num ? current.num + ' · ' : '') + current.title : 'Sales Playbook',
+      isFormation: s.mode === 'formation', isTerrain: s.mode === 'terrain',
+      modeFBg: s.mode === 'formation' ? '#fff' : 'transparent', modeFColor: s.mode === 'formation' ? '#171717' : '#737373', modeFShadow: s.mode === 'formation' ? '0 1px 2px rgba(23,23,23,.08)' : 'none',
+      modeTBg: s.mode === 'terrain' ? '#fff' : 'transparent', modeTColor: s.mode === 'terrain' ? '#171717' : '#737373', modeTShadow: s.mode === 'terrain' ? '0 1px 2px rgba(23,23,23,.08)' : 'none',
+      setFormation: () => this.setState({ mode: 'formation' }), setTerrain: () => this.setState({ mode: 'terrain' }),
+      homeNav: navStyle(isHome), homeCurrent: isHome ? 'page' : undefined,
+      navChapters: CH.map(c => Object.assign({ key: c.id, num: c.num, title: c.title, goal: c.goal, read: !!s.read[c.id], current: route === c.id ? 'page' : undefined, go: () => this.go(c.id) }, navStyle(route === c.id))),
+      navQuick: QUICK.map(x => Object.assign({ key: x.id, title: x.title, current: route === x.id ? 'page' : undefined, go: () => this.go(x.id) }, navStyle(route === x.id))),
+      readCount, readPct: Math.round(readCount / 7 * 100) + '%',
+      goHome: () => this.go('home'), goC2: () => this.go('c2'), goC3: () => this.go('c3'), goC6: () => this.go('c6'),
+      goObjections: () => this.go('objections', { objQ: '', objCat: 'all' }),
+      openNav: () => this.setState({ navOpen: true }), closeNav: () => this.setState({ navOpen: false }),
+      openSearch: () => this.openSearch(), closeSearch: () => this.setState({ searchOpen: false }),
+      mainRef: this.mainRef, searchRef: this.searchRef,
+      onScroll: e => {
+        const el = e.currentTarget, max = el.scrollHeight - el.clientHeight;
+        const pct = max > 0 ? el.scrollTop / max : 0;
+        this.setState({ scrollPct: pct, scrolled: el.scrollTop > 600 });
+        if (pct > 0.9) this.markRead();
+      },
+      scrollPctCss: (page || isObjLib) ? Math.round(s.scrollPct * 100) + '%' : '0%',
+      showTop: s.scrolled, toTop: () => this.mainRef.current && this.mainRef.current.scrollTo({ top: 0, behavior: 'smooth' }),
+      page: page || {}, blocks, toc, hasToc: toc.length > 1,
+      pricing: PRICING.map((p, k) => Object.assign({ key: p.name, bt: k ? '1px solid #EAEAEA' : '0' }, p)),
+      objQ: s.objQ, onObjQ: e => this.setState({ objQ: e.target.value, openObj: null }),
+      objCats, objList: objFiltered.map((o, k) => this.objView(o, k)), objHasResults: objFiltered.length > 0, objEmpty: objFiltered.length === 0,
+      searchOpen: s.searchOpen, q: s.q, onQ: e => this.setState({ q: e.target.value }),
+      onSearchKey: e => { if (e.key === 'Enter' && this._first) this._first.go(); },
+      results, searchHeading, noResults: !!q && results.length === 0
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored static export (sales playbook), not our code.
+    "src/content/**",
   ]),
 ]);
 
