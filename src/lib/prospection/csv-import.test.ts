@@ -56,6 +56,10 @@ describe("detectMapping", () => {
     expect(importText("Nom,Note\nA,4.5\nB,4,8\n").mapping[1]).toBe("rating");
     expect(importText("Nom,Note\nA,rappeler lundi\n").mapping[1]).toBe("notes");
   });
+  it("maps every column of the downloadable template", () => {
+    const { mapping } = importText("\uFEFFNom du salon;Adresse;Code postal;Ville;Téléphone;E-mail;Instagram;Site web;Lien Planity / Treatwell;Contact;Métier;Notes\r\nSalon Exemple;12 rue Oberkampf;75011;Paris;06 12 34 56 78;contact@salon-exemple.fr;@salonexemple;https://salon-exemple.fr;;Léa;Ongles;Rappeler lundi");
+    expect(mapping).toEqual(["name", "address", "postalCode", "city", "phone", "email", "instagram", "website", "bookingUrl", "contactName", "metier", "notes"]);
+  });
   it("uses each field once", () => {
     const { mapping } = importText("Téléphone,Tel portable\n0611223344,0711223344\n");
     expect(mapping.filter(f => f === "phone")).toHaveLength(1);

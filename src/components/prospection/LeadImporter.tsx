@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   IMPORT_BATCH_SIZE, LEAD_FIELDS, LEAD_FIELD_LABEL, MAX_IMPORT_ROWS,
@@ -13,7 +13,20 @@ const input = "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm tex
 const button = "rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50";
 
 type Owner = { id: string; name: string | null; email: string | null };
-type Totals = { created: number; skipped: number; alreadyInCrm: number; failedBatches: number };
+// Semicolons + BOM: French Excel opens this with accents and columns intact.
+const TEMPLATE_CSV = "﻿" + [
+  "Nom du salon;Adresse;Code postal;Ville;Téléphone;E-mail;Instagram;Site web;Lien Planity / Treatwell;Contact;Métier;Notes",
+  "Salon Exemple;12 rue Oberkampf;75011;Paris;06 12 34 56 78;contact@salon-exemple.fr;@salonexemple;https://salon-exemple.fr;;Léa;Ongles;Rappeler lundi",
+].join("\r\n");
+
+function downloadTemplate() {
+  const url = URL.createObjectURL(new Blob([TEMPLATE_CSV], { type: "text/csv;charset=utf-8" }));
+  const link = Object.assign(document.createElement("a"), { href: url, download: "modele-import-leads.csv" });
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+type Totals ={ created: number; skipped: number; alreadyInCrm: number; failedBatches: number };
 
 export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] }) {
   const router = useRouter();
@@ -23,6 +36,8 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [totals, setTotals] = useState<Totals | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const leads = useMemo(() => (file ? buildLeads(file.parsed, mapping) : []), [file, mapping]);
   const busy = progress !== null && progress.done < progress.total;
@@ -69,13 +84,35 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
 
   return (
     <details className="rounded-xl border border-slate-200 bg-white p-5" open={Boolean(file || totals)}>
-      <summary className="cursor-pointer font-semibold text-slate-950">Importer mes leads (CSV)</summary>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <span><span className="block font-semibold text-slate-950">Importer mes leads</span><span className="text-sm text-slate-500">Ajoutez vos propres salons depuis un fichier CSV</span></span>
+        <span className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700">Importer un fichier</span>
+      </summary>
       <p className="mt-2 text-sm text-slate-500">
         Exportez votre fichier en CSV depuis Excel, Google Sheets ou Airtable. Les colonnes sont reconnues automatiquement ;
         vous pouvez corriger la correspondance avant l’import. Les colonnes non reconnues sont conservées dans les notes.
       </p>
-      <input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" disabled={busy} aria-label="Fichier CSV de leads"
-        onChange={e => onFile(e.target.files?.[0])} className="mt-4 block text-sm" />
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); if (!busy) onFile(e.dataTransfer.files?.[0]); }}
+        className={`mt-4 flex flex-col items-center gap-3 rounded-xl border-2 border-dashed p-6 text-center transition-colors ${dragging ? "border-rose-400 bg-rose-50" : "border-slate-200 bg-slate-50"}`}
+      >
+        {/* The native input is hidden: its label ("Choose File…") follows the browser language. */}
+        <input ref={fileInput} type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" disabled={busy} className="sr-only" tabIndex={-1}
+          aria-label="Fichier CSV de leads" onChange={e => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-8 w-8 text-rose-600" fill="none" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
+        <p className="text-sm text-slate-700">
+          {file ? <><strong>{file.name}</strong> est prêt à être importé.</> : "Glissez votre fichier CSV ici, ou"}
+        </p>
+        <div className="flex flex-wrap justify-center gap-3">
+          <button type="button" onClick={() => fileInput.current?.click()} disabled={busy} className={button}>
+            {file ? "Choisir un autre fichier" : "Télécharger mon fichier CSV"}
+          </button>
+          <button type="button" onClick={downloadTemplate} className={input}>Télécharger le modèle CSV</button>
+        </div>
+        <p className="text-xs text-slate-500">Formats acceptés : .csv, .tsv, .txt · jusqu’à {MAX_IMPORT_ROWS.toLocaleString("fr-FR")} lignes</p>
+      </div>
       {readError && <p role="alert" className="mt-3 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{readError}</p>}
 
       {file && <div className="mt-5 space-y-5">
