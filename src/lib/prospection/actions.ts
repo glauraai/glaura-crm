@@ -8,8 +8,7 @@ import { requireMember, requireAdmin, prospectScope } from "@/lib/access";
 import { parisDateInput, parisDeadline } from "@/lib/crm-format";
 import { ZONE_BY_SLUG } from "@/lib/prospection/zones";
 import { tierForProspect } from "@/lib/prospection/tier";
-import { uniqueSalonSlug } from "@/lib/slugs";
-import type { BookingTool, ProspectSource } from "@/generated/prisma/enums";
+import { convertProspectInTx } from "@/lib/prospection/convert";
 
 async function withErrorBanner(work: () => Promise<void>): Promise<never> {
   let error: string | null = null;
@@ -109,8 +108,6 @@ export async function validateInstagram(fd: FormData) {
   });
 }
 
-const SOURCE_TO_BOOKING_TOOL: Record<ProspectSource, BookingTool> = { PLANITY: "PLANITY", TREATWELL: "TREATWELL", BOOKSY: "BOOKSY", FRESHA: "FRESHA", GOOGLE: "NONE", INSTAGRAM: "NONE", IMPORT: "NONE" };
-
 export async function convertProspect(fd: FormData) {
   const user = await requireMember();
   return withErrorBanner(async () => {
@@ -120,19 +117,8 @@ export async function convertProspect(fd: FormData) {
       if (!prospect) throw new Error("Prospect inaccessible.");
       if (prospect.status === "CONVERTI") return;
       if (prospect.matchedSalonId || !["NOUVEAU", "EN_TOURNEE"].includes(prospect.status)) throw new Error("Ce prospect est déjà traité.");
-      const claimed = await tx.prospect.updateMany({ where: { id, status: prospect.status, salonId: null }, data: { status: "CONVERTI" } });
-      if (!claimed.count) throw new Error("Ce prospect vient d’être modifié. Actualisez la liste.");
-      const salon = await tx.salon.create({ data: {
-        name: prospect.name, slug: await uniqueSalonSlug(prospect.name), metier: prospect.metiers,
-        arrondissement: prospect.postalCode, address: prospect.address, instagram: prospect.instagram,
-        bookingTool: prospect.source === "IMPORT" ? (prospect.planityUrl ? "PLANITY" : prospect.treatwellUrl ? "TREATWELL" : "NONE") : SOURCE_TO_BOOKING_TOOL[prospect.source], bookingUrl: prospect.source === "IMPORT" ? prospect.planityUrl ?? prospect.treatwellUrl : ["GOOGLE", "INSTAGRAM"].includes(prospect.source) ? null : prospect.sourceUrl,
-        phone: prospect.phone, contactName: prospect.contactName, contactEmail: prospect.email, rating: prospect.rating,
-        source: prospect.source === "IMPORT" ? "IMPORT" : "SCRAPE", sourceLabel: prospect.source === "IMPORT" ? "Import CSV" : prospect.dualPlatformCheckedAt ? "Prospection Treatwell + Planity" : `Prospection ${prospect.source.toLowerCase()}`,
-        notes: [prospect.notes, prospect.website ? `Site : ${prospect.website}` : null, prospect.treatwellUrl ? `Fiche Treatwell : ${prospect.treatwellUrl}` : null, prospect.planityUrl ? `Fiche Planity : ${prospect.planityUrl}` : null].filter(Boolean).join("\n") || null,
-        assignedToId: prospect.assignedToId ?? prospect.tournee?.assignedToId ?? user.id,
-      } });
-      await tx.prospect.update({ where: { id }, data: { salonId: salon.id } });
-      await tx.salesTask.updateMany({ where: { prospectId: id }, data: { salonId: salon.id } });
+      const salonId = await convertProspectInTx(tx, prospect, user.id);
+      if (!salonId) throw new Error("Ce prospect vient d’être modifié. Actualisez la liste.");
     });
     revalidatePath("/salons");
   });

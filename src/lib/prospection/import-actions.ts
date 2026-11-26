@@ -11,6 +11,7 @@ import { loadCrmIndex } from "@/lib/prospection/upsert";
 import { zoneForPostalCode } from "@/lib/prospection/zones";
 import { tierForProspect } from "@/lib/prospection/tier";
 import { METIER_ORDER } from "@/lib/labels";
+import { convertProspectInTx } from "@/lib/prospection/convert";
 import { IMPORT_BATCH_SIZE, matchOwner, type OwnerCandidate } from "@/lib/prospection/csv-import";
 
 // Persists one batch of CSV leads (the browser parses and maps the file, then
@@ -18,6 +19,10 @@ import { IMPORT_BATCH_SIZE, matchOwner, type OwnerCandidate } from "@/lib/prospe
 // belong to the importer. An admin may pick a default owner (or none) and map a
 // "Commercial" column: each row goes to the member it names, unknown names fall
 // back to the default and stay readable in the notes. Reps can't assign others.
+// With destination "salons" every new lead is also converted into a Salon lead
+// right away (same code as "Ajouter aux salons"); otherwise it stays a prospect.
+// A lead whose phone or name+postal already belongs to a CRM salon is never
+// converted: it is kept as a "Déjà dans le CRM" prospect instead.
 // Re-importing is safe: a lead already in the pool — same name+postal/phone/
 // email key, same Planity/Treatwell page or same Instagram — is skipped, never
 // overwritten, so one rep can't take over another's prospect.
@@ -33,7 +38,7 @@ const leadSchema = z.object({
   reviewCount: z.number().int().min(0).catch(0),
 });
 
-export type ImportBatchResult = { ok: true; created: number; skipped: number; alreadyInCrm: number; unmatchedOwners: string[] } | { ok: false; error: string };
+export type ImportBatchResult = { ok: true; created: number; skipped: number; alreadyInCrm: number; unmatchedOwners: string[]; salons: number } | { ok: false; error: string };
 
 function importKey(lead: z.infer<typeof leadSchema>): string {
   const parts = [normalizeName(lead.name), lead.postalCode ?? lead.city ?? "", canonicalizePhone(lead.phone ?? ""), lead.email ?? ""];
@@ -50,7 +55,13 @@ async function resolveOwner(user: { id: string; role?: string }, ownerId: string
   return member?.id;
 }
 
-export async function importLeadBatch(input: { leads: unknown[]; ownerId: string | null }): Promise<ImportBatchResult> {
+/** Canonical phone → salon id, for phones long enough to be meaningful. */
+async function salonPhoneIndex(): Promise<Map<string, string>> {
+  const salons = await prisma.salon.findMany({ where: { phone: { not: null } }, select: { id: true, phone: true } });
+  return new Map(salons.map(s => [canonicalizePhone(s.phone ?? ""), s.id] as const).filter(([phone]) => phone.length >= 9));
+}
+
+export async function importLeadBatch(input: { leads: unknown[]; ownerId: string | null; destination?: "salons" | "prospects" }): Promise<ImportBatchResult> {
   const user = await requireMember();
   try {
     // Validate lead by lead: one malformed row is dropped, never the batch.
@@ -59,7 +70,7 @@ export async function importLeadBatch(input: { leads: unknown[]; ownerId: string
     const ownerId = z.string().max(100).nullable().catch(null).parse(input?.ownerId ?? null);
     const assignedToId = await resolveOwner(user, ownerId);
     if (assignedToId === undefined) return { ok: false, error: INACTIVE_OWNER };
-    if (!leads.length) return { ok: true, created: 0, skipped: input?.leads?.length ?? 0, alreadyInCrm: 0, unmatchedOwners: [] };
+    if (!leads.length) return { ok: true, created: 0, skipped: input?.leads?.length ?? 0, alreadyInCrm: 0, unmatchedOwners: [], salons: 0 };
 
     const members: OwnerCandidate[] = user.role === "ADMIN" && leads.some(l => l.owner)
       ? await prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, email: true } })
@@ -71,11 +82,13 @@ export async function importLeadBatch(input: { leads: unknown[]; ownerId: string
       ? (await prisma.prospect.findMany({ where: { instagram: { in: handles } }, select: { instagram: true } })).map(p => p.instagram)
       : []);
     const index = await loadCrmIndex();
+    const salonByPhone = await salonPhoneIndex();
     const now = new Date();
     let alreadyInCrm = 0;
     const rows = leads.filter(l => !l.instagram || !takenHandles.has(l.instagram)).map(lead => {
       const sourceUrl = importKey(lead);
-      const matchedSalonId = matchCrmSalon({ name: lead.name, sourceUrl: lead.planityUrl ?? lead.treatwellUrl ?? lead.website ?? sourceUrl, postalCode: lead.postalCode }, index);
+      const matchedSalonId = matchCrmSalon({ name: lead.name, sourceUrl: lead.planityUrl ?? lead.treatwellUrl ?? lead.website ?? sourceUrl, postalCode: lead.postalCode }, index)
+        ?? (lead.phone ? salonByPhone.get(canonicalizePhone(lead.phone)) ?? null : null);
       if (matchedSalonId) alreadyInCrm++;
       const { owner, ...fields } = lead;
       const rowOwner = matchOwner(owner, members);
@@ -95,9 +108,21 @@ export async function importLeadBatch(input: { leads: unknown[]; ownerId: string
         lastSeenAt: now,
       };
     });
-    const { count } = rows.length ? await prisma.prospect.createMany({ data: rows, skipDuplicates: true }) : { count: 0 };
+    const created = rows.length ? await prisma.prospect.createManyAndReturn({ data: rows, skipDuplicates: true }) : [];
+    let salons = 0;
+    if (input.destination === "salons") {
+      // One transaction per lead: a failed conversion leaves that lead a prospect.
+      for (const prospect of created.filter(p => p.status === "NOUVEAU")) {
+        const salonId = await prisma.$transaction(tx => convertProspectInTx(tx, { ...prospect, tournee: null }, user.id)).catch(error => {
+          console.error("[prospection] CSV import conversion failed", { prospectId: prospect.id, error });
+          return null;
+        });
+        if (salonId) salons++;
+      }
+      revalidatePath("/salons");
+    }
     revalidatePath("/prospection");
-    return { ok: true, created: count, skipped: input.leads.length - count, alreadyInCrm, unmatchedOwners: [...unmatchedOwners].slice(0, 50) };
+    return { ok: true, created: created.length, skipped: input.leads.length - created.length, alreadyInCrm, unmatchedOwners: [...unmatchedOwners].slice(0, 50), salons };
   } catch (e) {
     console.error("[prospection] CSV import batch failed", { userId: user.id, error: e });
     return { ok: false, error: "Ce lot n’a pas pu être importé. Réessayez ; les lignes déjà importées ne seront pas dupliquées." };
