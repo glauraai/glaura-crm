@@ -12,7 +12,7 @@ import { normalizeInstagramHandle } from "@/lib/instagram";
 import { uniqueEmailTemplateKey, uniqueSalonSlug } from "@/lib/slugs";
 import { defaultEmailFrom } from "@/lib/email";
 import { decrypt } from "@/lib/crypto";
-import { canRevealOnboardingPassword } from "@/lib/onboarding-access";
+import { canRevealOnboardingPassword, prepareAccountBlocker } from "@/lib/onboarding-access";
 import { storeEmailImage } from "@/lib/email-assets/store";
 import { decryptJobPassword, fetchCompanyUserName, findCredentialJob } from "@/lib/onboarding/salon-credentials";
 import { renderWelcomeEmail } from "@/lib/onboarding/welcome-email";
@@ -506,9 +506,8 @@ export async function triggerOnboarding(salonId: string) {
   const salon = await prisma.salon.findUnique({ where: { id: salonId } });
   if (!salon) throw new Error("Salon introuvable");
 
-  const isAdmin = user.role === "ADMIN";
-  if (!isAdmin && salon.assignedToId !== user.id) throw new Error("Réservé au commercial assigné ou à un admin");
-  if (!isAdmin && salon.status !== "SIGNE") throw new Error("Le salon doit être au statut Signé");
+  const blocker = prepareAccountBlocker(user, salon);
+  if (blocker) throw new Error(blocker);
   if (!salon.bookingUrl) throw new Error("Aucune URL de réservation à scraper");
 
   // Enqueue-only: the out-of-process onboarding worker

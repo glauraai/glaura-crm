@@ -12,7 +12,7 @@ import { getSalon, getAssignableUsers } from "@/lib/salons";
 import { prisma } from "@/lib/db";
 import { addReminder, approveProIdentityAndRetry, changeStatus, completeReminder, logActivity, queueFollowUpEmail, setDailyPriority, triggerOnboarding, updateSalon } from "@/lib/actions";
 import { isDailyPriorityActive } from "@/lib/dailyPriority";
-import { canRevealOnboardingPassword } from "@/lib/onboarding-access";
+import { canRevealOnboardingPassword, prepareAccountBlocker } from "@/lib/onboarding-access";
 import { fetchCompanyUserName, onboardingPreviewValues } from "@/lib/onboarding/salon-credentials";
 import { salonPageUrl } from "@/lib/onboarding/welcome-email";
 import { REELS_EVENT_TYPES, reelsStatus } from "@/lib/onboarding/reels/status";
@@ -106,7 +106,7 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
       }))
     : null;
   const onboardingBusy = latestJob?.status === "QUEUED" || latestJob?.status === "PROCESSING";
-  const canTrigger = !!me && hasBookingUrl && !onboardingBusy && (isAdmin || salon.assignedToId === me.id) && (isAdmin || salon.status === "SIGNE");
+  const canTrigger = !!me && hasBookingUrl && !onboardingBusy && !prepareAccountBlocker(me, salon);
   const canRevealPassword = canRevealOnboardingPassword(me);
   const visibleActivities = salon.activities.filter((activity) => activity.type !== "EMAIL");
   const editSalon = {
@@ -311,9 +311,7 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
                   ? "Ajoute une URL de réservation avant de lancer l'onboarding."
                   : onboardingBusy
                     ? "Un job est déjà en cours."
-                    : salon.status !== "SIGNE"
-                    ? "Disponible une fois le salon Signé."
-                    : "Réservé au commercial assigné ou à un admin."}
+                    : `${me ? prepareAccountBlocker(me, salon) : "Connexion requise"}.`}
               </p>
             )}
           </div>
