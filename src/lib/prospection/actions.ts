@@ -109,7 +109,7 @@ export async function validateInstagram(fd: FormData) {
   });
 }
 
-const SOURCE_TO_BOOKING_TOOL: Record<ProspectSource, BookingTool> = { PLANITY: "PLANITY", TREATWELL: "TREATWELL", BOOKSY: "BOOKSY", FRESHA: "FRESHA", GOOGLE: "NONE", INSTAGRAM: "NONE" };
+const SOURCE_TO_BOOKING_TOOL: Record<ProspectSource, BookingTool> = { PLANITY: "PLANITY", TREATWELL: "TREATWELL", BOOKSY: "BOOKSY", FRESHA: "FRESHA", GOOGLE: "NONE", INSTAGRAM: "NONE", IMPORT: "NONE" };
 
 export async function convertProspect(fd: FormData) {
   const user = await requireMember();
@@ -125,9 +125,10 @@ export async function convertProspect(fd: FormData) {
       const salon = await tx.salon.create({ data: {
         name: prospect.name, slug: await uniqueSalonSlug(prospect.name), metier: prospect.metiers,
         arrondissement: prospect.postalCode, address: prospect.address, instagram: prospect.instagram,
-        bookingTool: SOURCE_TO_BOOKING_TOOL[prospect.source], bookingUrl: ["GOOGLE", "INSTAGRAM"].includes(prospect.source) ? null : prospect.sourceUrl, rating: prospect.rating,
-        source: "SCRAPE", sourceLabel: prospect.dualPlatformCheckedAt ? "Prospection Treatwell + Planity" : `Prospection ${prospect.source.toLowerCase()}`,
-        notes: [prospect.treatwellUrl ? `Fiche Treatwell : ${prospect.treatwellUrl}` : null, prospect.planityUrl ? `Fiche Planity : ${prospect.planityUrl}` : null].filter(Boolean).join("\n") || null,
+        bookingTool: prospect.source === "IMPORT" ? (prospect.planityUrl ? "PLANITY" : prospect.treatwellUrl ? "TREATWELL" : "NONE") : SOURCE_TO_BOOKING_TOOL[prospect.source], bookingUrl: prospect.source === "IMPORT" ? prospect.planityUrl ?? prospect.treatwellUrl : ["GOOGLE", "INSTAGRAM"].includes(prospect.source) ? null : prospect.sourceUrl,
+        phone: prospect.phone, contactName: prospect.contactName, contactEmail: prospect.email, rating: prospect.rating,
+        source: prospect.source === "IMPORT" ? "IMPORT" : "SCRAPE", sourceLabel: prospect.source === "IMPORT" ? "Import CSV" : prospect.dualPlatformCheckedAt ? "Prospection Treatwell + Planity" : `Prospection ${prospect.source.toLowerCase()}`,
+        notes: [prospect.notes, prospect.website ? `Site : ${prospect.website}` : null, prospect.treatwellUrl ? `Fiche Treatwell : ${prospect.treatwellUrl}` : null, prospect.planityUrl ? `Fiche Planity : ${prospect.planityUrl}` : null].filter(Boolean).join("\n") || null,
         assignedToId: prospect.assignedToId ?? prospect.tournee?.assignedToId ?? user.id,
       } });
       await tx.prospect.update({ where: { id }, data: { salonId: salon.id } });

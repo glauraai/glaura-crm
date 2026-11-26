@@ -80,6 +80,7 @@ enum ProspectSource {
   TREATWELL
   BOOKSY
   FRESHA
+  IMPORT // uploaded by a salesperson from a CSV file
 }
 
 enum ProspectStatus {
@@ -269,6 +270,29 @@ model Prospect {
 
   tier Int @default(1) // 1=IG inconnu … 4=IG fort (see lib/prospection/tier.ts)
 
+  // AI fit scoring & French legal/revenue enrichment (batch-populated)
+  aiScore            Float? // 0-100 Glaura fit score
+  aiSpecialty        String? // both | nails | beauty | hair | barber | spa | other | unknown
+  aiOwnership        String? // independent_indicated | chain_or_franchise | unknown
+  aiSummary          String?   @db.Text
+  aiScoredAt         DateTime?
+  legalEntity        String?
+  siren              String?
+  siret              String?
+  activeSites        Int?
+  companyMatchStatus String? // VERIFIED | CANDIDATE | UNRESOLVED | EXCLUDED
+  revenueEur         Int? // latest published annual company revenue (EUR)
+  revenueYear        Int?
+  revenueStatus      String? // PUBLISHED | CONFIDENTIAL | UNAVAILABLE
+  filingUrl          String? // BODACC filing notice URL
+
+  // Contact details a salesperson brought in a CSV import (source IMPORT).
+  phone       String?
+  email       String?
+  website     String?
+  contactName String?
+  notes       String? @db.Text // mapped notes + every CSV column we could not map
+
   status         ProspectStatus @default(NOUVEAU)
   matchedSalonId String? // existing CRM salon this prospect was matched to (DEJA_CRM)
 
@@ -294,6 +318,9 @@ model Prospect {
   @@index([assignedToId, status])
   @@index([igStatus])
   @@index([googleStatus])
+  @@index([aiScore])
+  @@index([aiSpecialty])
+  @@index([siren])
 }
 
 // A daily prospecting round: 20-30 prospects in one zone, assigned to a commercial.

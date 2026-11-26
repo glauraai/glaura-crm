@@ -73,6 +73,7 @@ export const PROSPECT_SOURCE_LABEL: Record<ProspectSource, string> = {
   TREATWELL: "Treatwell",
   BOOKSY: "Booksy",
   FRESHA: "Fresha",
+  IMPORT: "Import CSV",
 };
 
 export const PROSPECT_SOURCE_STYLE: Record<ProspectSource, string> = {
@@ -82,6 +83,7 @@ export const PROSPECT_SOURCE_STYLE: Record<ProspectSource, string> = {
   TREATWELL: "bg-orange-100 text-orange-700",
   BOOKSY: "bg-teal-100 text-teal-700",
   FRESHA: "bg-fuchsia-100 text-fuchsia-700",
+  IMPORT: "bg-slate-100 text-slate-700",
 };
 
 // accountStatusLabel values that need a rep's attention, surfaced as a chip on
