@@ -75,6 +75,8 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
         ? { ...acc, created: acc.created + result.created, skipped: acc.skipped + result.skipped, alreadyInCrm: acc.alreadyInCrm + result.alreadyInCrm, unmatchedOwners: [...new Set([...acc.unmatchedOwners, ...result.unmatchedOwners])] }
         : { ...acc, failedBatches: acc.failedBatches + 1 };
       if (result && !result.ok && i === 0) setReadError(result.error);
+      // A thrown call is almost always a tab opened before a deploy (stale server action).
+      if (!result && i === 0) setReadError("Le CRM a été mis à jour depuis l’ouverture de cette page. Actualisez la page puis relancez l’import : rien ne sera dupliqué.");
       setProgress({ done: Math.min((i + 1) * IMPORT_BATCH_SIZE, leads.length), total: leads.length });
     }
     setTotals(acc);
