@@ -6,7 +6,7 @@ export function Sidebar({ user }: { user: { name?: string | null; email?: string
   const admin = user.role === "ADMIN";
   const links = [
     ["/dashboard", "Aujourd’hui", "◷"], ["/taches", admin ? "Suivi des actions" : "Mes tâches", "✓"],
-    ["/prospection", admin ? "Prospection" : "Mes prospects", "⌕"], ["/salons", "Salons et suivi", "▤"],
+    ["/prospection", admin ? "Prospection" : "Mes prospects", "⌕"], ["/salons", "Salons et suivi", "▤"], ["/liens", "Liens utiles", "⧉"],
     ...(canAccessInstagram(user) ? [["/instagram", "Messagerie Instagram", "◎"], ["/automatisations", "Automatisations", "⟳"]] : []),
     ...(admin ? [["/modeles", "Modèles d’email", "✉"], ["/onboarding", "Création de comptes salons", "↗"], ["/administration", "Équipe et accès", "⚙"]] : []),
   ];
