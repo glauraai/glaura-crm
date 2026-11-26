@@ -80,6 +80,7 @@ enum ProspectSource {
   TREATWELL
   BOOKSY
   FRESHA
+  IMPORT // uploaded by a salesperson from a CSV file
 }
 
 enum ProspectStatus {
@@ -284,6 +285,13 @@ model Prospect {
   revenueYear        Int?
   revenueStatus      String? // PUBLISHED | CONFIDENTIAL | UNAVAILABLE
   filingUrl          String? // BODACC filing notice URL
+
+  // Contact details a salesperson brought in a CSV import (source IMPORT).
+  phone       String?
+  email       String?
+  website     String?
+  contactName String?
+  notes       String? @db.Text // mapped notes + every CSV column we could not map
 
   status         ProspectStatus @default(NOUVEAU)
   matchedSalonId String? // existing CRM salon this prospect was matched to (DEJA_CRM)
