@@ -1,3 +1,5 @@
+import type { SalonStatus } from "@/generated/prisma/enums";
+
 /**
  * PURE authorization predicate for onboarded-account credentials.
  *
@@ -31,4 +33,19 @@ export function canRevealOnboardingPassword(
   viewer: CredentialViewer | null | undefined,
 ): viewer is CredentialViewer & { id: string } {
   return !!viewer?.id;
+}
+
+/**
+ * Why the viewer may not prepare (onboard) this salon's account, or null.
+ * Reps prepare the disabled Glaura account before the visit, as the playbook
+ * asks, on their own salons; only a salon marked "Pas intéressé" is excluded.
+ */
+export function prepareAccountBlocker(
+  user: CredentialViewer,
+  salon: { assignedToId: string | null; status: SalonStatus },
+): string | null {
+  if (user.role === "ADMIN") return null;
+  if (!user.id || salon.assignedToId !== user.id) return "Réservé au commercial assigné ou à un admin";
+  if (salon.status === "PAS_INTERESSE") return "Indisponible pour un salon Pas intéressé";
+  return null;
 }
