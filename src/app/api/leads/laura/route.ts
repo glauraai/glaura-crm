@@ -26,6 +26,7 @@ import {
   lauraLeadSchema,
   notesFor,
   salonNameFor,
+  sourceLabelFor,
 } from "@/lib/leads/laura-lead";
 import { provisionLauraAccount } from "@/lib/leads/laura-provision";
 
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
     // The salon raised its hand; it is warmer than anything we found ourselves.
     status: "INTERESSE" as const,
     leadTemperature: "CHAUD",
-    sourceLabel: "Page /laura",
+    sourceLabel: sourceLabelFor(body),
     notes,
     lastContactedAt: null,
   };

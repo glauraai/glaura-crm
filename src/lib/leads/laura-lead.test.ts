@@ -7,6 +7,7 @@ import {
   lauraLeadSchema,
   notesFor,
   salonNameFor,
+  sourceLabelFor,
 } from "./laura-lead";
 
 describe("lauraLeadSchema", () => {
@@ -165,5 +166,25 @@ describe("phoneVerified", () => {
     // "false" and 0 are both truthy-ish in the wrong hands; refuse them.
     expect(lauraLeadSchema.safeParse({ ...base, phoneVerified: "true" }).success).toBe(false);
     expect(lauraLeadSchema.safeParse({ ...base, phoneVerified: 1 }).success).toBe(false);
+  });
+});
+
+describe("sourceLabelFor", () => {
+  it("names the website form the lead came from", () => {
+    expect(sourceLabelFor({ source: "pro-signup" })).toBe("Page /pro/creer-ma-page");
+    expect(sourceLabelFor({ source: "compte-en-24h" })).toBe("Page /compte-en-24h");
+    expect(sourceLabelFor({ source: "pro-callback:/pro/caisse" })).toBe("Rappel /pro/caisse");
+    expect(sourceLabelFor({ source: "pro-callback:" })).toBe("Rappel /pro");
+  });
+
+  it("falls back to /laura for the Laura form and unknown sources", () => {
+    expect(sourceLabelFor({ source: null })).toBe("Page /laura");
+    expect(sourceLabelFor({ source: "https://glaura.ai/laura" })).toBe("Page /laura");
+  });
+
+  it("puts the form in the callback note", () => {
+    expect(
+      notesFor({ source: "pro-signup", utmSource: null, utmMedium: null, utmCampaign: null }).split("\n")[0],
+    ).toBe("Demande de rappel depuis /pro/creer-ma-page.");
   });
 });
