@@ -26,6 +26,8 @@ import {
   TYPE_STYLE,
 } from "@/lib/labels";
 import { cn, timeAgo } from "@/lib/utils";
+import { repSender } from "@/lib/email";
+import { CopyLinkButton } from "@/components/CopyLinkButton";
 
 const ACT_TYPES = ["APPEL", "VISIO", "VISITE", "RELANCE", "EMAIL", "DEMO", "NOTE"] as const;
 const card = "rounded-xl border border-slate-300 bg-white p-5 shadow-sm";
@@ -65,7 +67,7 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
   const session = { user: await requireMember() };
   const me = session?.user;
   const isAdmin = me?.role === "ADMIN";
-  const [salon, assignableUsers, emailTemplates] = await Promise.all([
+  const [salon, assignableUsers, emailTemplates, myAccount] = await Promise.all([
     getSalon(id, me ? { id: me.id, role: me.role } : undefined),
     isAdmin ? getAssignableUsers() : Promise.resolve([]),
     // Archived templates stay out of the dropdown but remain joinable from the
@@ -75,7 +77,9 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
       orderBy: { sortOrder: "asc" },
       select: { id: true, label: true, subject: true, body: true, format: true },
     }),
+    prisma.user.findUnique({ where: { id: me.id }, select: { bookingUrl: true, email: true, name: true } }),
   ]);
+  const mySender = repSender(myAccount);
   if (!salon) notFound();
 
   const priorityActive = isDailyPriorityActive(salon.priorityDate);
@@ -354,7 +358,13 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
         {/* Right: reminders */}
         <div className="space-y-5">
           <div className={card}>
-            <h2 className="mb-3 text-sm font-semibold text-slate-900">Email</h2>
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Email</h2>
+                <p className="text-xs text-slate-500">{mySender ? `Envoyé en votre nom (${mySender.address}), copie dans votre boîte` : "Envoyé depuis support@glaura.fr, réponses vers votre adresse"}</p>
+              </div>
+              {myAccount?.bookingUrl ? <CopyLinkButton url={myAccount.bookingUrl} label="Copier mon lien de RDV" /> : <a href="/liens" className="text-xs font-medium text-rose-700">Ajouter mon lien de RDV →</a>}
+            </div>
             <EmailFollowUpForm
               action={queueFollowUpEmail.bind(null, id)}
               salon={{

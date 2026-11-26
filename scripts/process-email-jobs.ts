@@ -1,6 +1,7 @@
 import { loadEnvConfig } from "@next/env";
 import type { PrismaClient } from "../src/generated/prisma/client";
 import type { sendEmail as sendEmailFn } from "../src/lib/email";
+import { repSender } from "../src/lib/email";
 
 loadEnvConfig(process.cwd());
 
@@ -20,7 +21,7 @@ async function claimJob(prisma: Prisma, id: string) {
   }
   return prisma.emailJob.findUnique({
     where: { id },
-    include: { requestedBy: { select: { email: true } } },
+    include: { requestedBy: { select: { email: true, name: true } } },
   });
 }
 
@@ -33,12 +34,16 @@ async function processJob(prisma: Prisma, sendEmail: SendEmail, id: string) {
     // `bodyText`; TEXT jobs are plaintext all the way down. Never send an
     // HTML-only message — spam filters and text-only clients both punish it.
     const isHtml = job.format === "HTML";
+    const sender = repSender(job.requestedBy);
     await sendEmail({
       to: job.to,
       subject: job.subject,
       text: isHtml ? job.bodyText || stripHtml(job.body) : job.body,
       html: isHtml ? job.body : null,
       replyTo: job.requestedBy?.email,
+      // Sent in the rep's name, with a copy in their own mailbox.
+      from: sender,
+      bcc: sender?.address,
     });
 
     await prisma.emailJob.update({

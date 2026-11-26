@@ -13,12 +13,30 @@ export type SendEmailInput = {
   /** Optional HTML body. When set, `text` is kept as the plaintext fallback. */
   html?: string | null;
   replyTo?: string | null;
+  /** Sender override (a rep's own address); defaults to SMTP_FROM. */
+  from?: { name: string; address: string } | null;
+  bcc?: string | null;
   /** Extra message headers, e.g. List-Unsubscribe. */
   headers?: Record<string, string>;
 };
 
 export function defaultEmailFrom() {
   return process.env.SMTP_FROM || "Glaura <support@glaura.fr>";
+}
+
+/**
+ * The rep as sender, when their address is on a domain our SMTP provider is
+ * authenticated for (SPF/DKIM) — otherwise null and the email leaves from
+ * SMTP_FROM, because a From on an unauthenticated domain lands in spam.
+ * REP_SENDER_DOMAINS: comma-separated, default "glaura.fr".
+ */
+export function repSender(user: { email?: string | null; name?: string | null } | null | undefined): { name: string; address: string } | null {
+  const address = user?.email?.trim().toLowerCase();
+  if (!address || !/^[^\s@"<>]+@[^\s@"<>]+$/.test(address)) return null;
+  const domains = (process.env.REP_SENDER_DOMAINS ?? "glaura.fr").split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
+  if (!domains.includes(address.split("@")[1])) return null;
+  const person = user?.name?.replace(/[\r\n"<>]/g, " ").replace(/\s+/g, " ").trim();
+  return { name: person ? `${person} · Glaura` : "Glaura", address };
 }
 
 /**
@@ -56,7 +74,7 @@ async function buildBody(html?: string | null) {
   return { html: inlined.html, attachments: attachments.length ? attachments : undefined };
 }
 
-export async function sendEmail({ to, subject, text, html, replyTo, headers }: SendEmailInput) {
+export async function sendEmail({ to, subject, text, html, replyTo, from, bcc, headers }: SendEmailInput) {
   const host = process.env.SMTP_HOST;
   if (!host) throw new Error("SMTP_HOST manquant");
 
@@ -85,8 +103,9 @@ export async function sendEmail({ to, subject, text, html, replyTo, headers }: S
   const body = await buildBody(html);
 
   await transporter.sendMail({
-    from: defaultEmailFrom(),
+    from: from ?? defaultEmailFrom(),
     to,
+    bcc: bcc || undefined,
     subject,
     text,
     html: body.html,
