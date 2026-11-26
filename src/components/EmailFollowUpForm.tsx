@@ -25,12 +25,13 @@ type Props = {
    * browser just to draw a preview.
    */
   onboardingValues?: Record<string, string> | null;
+  isAdmin?: boolean;
 };
 
 const field = "h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 disabled:bg-slate-50 disabled:text-slate-400";
 const textareaField = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 disabled:bg-slate-50 disabled:text-slate-400";
 
-export function EmailFollowUpForm({ action, salon, templates, onboardingValues }: Props) {
+export function EmailFollowUpForm({ action, salon, templates, onboardingValues, isAdmin = true }: Props) {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const initialRecipient = isValidEmail(salon.contactEmail) ? salon.contactEmail!.trim() : "";
   const [recipient, setRecipient] = useState(initialRecipient);
@@ -135,9 +136,11 @@ export function EmailFollowUpForm({ action, salon, templates, onboardingValues }
         ) : (
           <span />
         )}
-        <Link href="/modeles" className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline">
-          Gérer les modèles
-        </Link>
+        {isAdmin && (
+          <Link href="/modeles" className="text-xs font-semibold text-slate-500 hover:text-slate-700 hover:underline">
+            Gérer les modèles
+          </Link>
+        )}
       </div>
     </form>
   );

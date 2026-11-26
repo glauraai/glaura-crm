@@ -15,12 +15,11 @@ describe("CRM access boundaries", () => {
     await expect(requireAdmin()).rejects.toThrow("administration");
     await expect(requireInstagramAdmin()).rejects.toThrow("administration");
   });
-  it("keeps the inbox private even from other administrators", async () => {
-    vi.stubEnv("CRM_INSTAGRAM_ADMIN_EMAIL", "owner@glaura.fr");
-    mocks.auth.mockResolvedValue({ user: { id: "other", role: "ADMIN", email: "other@glaura.fr" } });
-    await expect(requireInstagramAdmin()).rejects.toThrow("privée");
-    expect(canAccessInstagram({ role: "ADMIN", email: "OWNER@glaura.fr" })).toBe(true);
-    expect(canAccessInstagram({ role: "COMMERCIAL", email: "owner@glaura.fr" })).toBe(false);
+  it("grants full Instagram inbox access to every administrator and denies commercials", async () => {
+    mocks.auth.mockResolvedValue({ user: { id: "fode", role: "ADMIN", email: "fode.sylla@glaura.fr" } });
+    await expect(requireInstagramAdmin()).resolves.toMatchObject({ id: "fode", role: "ADMIN" });
+    expect(canAccessInstagram({ role: "ADMIN", email: "fode.sylla@glaura.fr" })).toBe(true);
+    expect(canAccessInstagram({ role: "COMMERCIAL", email: "simone@glaura.fr" })).toBe(false);
   });
   it("scopes sales to direct assignments and legacy rounds without overriding a new owner", () => {
     expect(prospectScope({ id: "rep", role: "COMMERCIAL" })).toEqual({ OR: [{ assignedToId: "rep" }, { assignedToId: null, tournee: { assignedToId: "rep" } }] });

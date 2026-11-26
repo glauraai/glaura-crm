@@ -13,16 +13,21 @@ export async function requireAdmin() {
   return user;
 }
 
-// The private inbox belongs to one account, rather than every administrator.
+// Every administrator (Fodé, cofounders, CRM admin) can access the full Instagram inbox.
 export function canAccessInstagram(user: { role?: string; email?: string | null }) {
-  const owner = (process.env.CRM_INSTAGRAM_ADMIN_EMAIL ?? process.env.CRM_ADMIN_EMAIL ?? "admin@glaura.fr").trim().toLowerCase();
-  return user.role === "ADMIN" && user.email?.trim().toLowerCase() === owner;
+  return user.role === "ADMIN";
+}
+
+// Commercials can view and reply to Instagram conversations strictly on Salons assigned to them.
+export function canAccessSalonInstagram(
+  user: { id: string; role?: string | null },
+  salon: { assignedToId?: string | null },
+) {
+  return user.role === "ADMIN" || (Boolean(salon.assignedToId) && salon.assignedToId === user.id);
 }
 
 export async function requireInstagramAdmin() {
-  const user = await requireAdmin();
-  if (!canAccessInstagram(user)) throw new Error("Cette messagerie est privée.");
-  return user;
+  return requireAdmin();
 }
 
 export function prospectScope(user: { id: string; role?: string }) {

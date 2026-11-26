@@ -101,6 +101,24 @@ export async function getSalon(id: string, viewer?: ViewerScope) {
       reminders: { orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { done: "asc" }, { dueAt: "asc" }] },
       onboardingJobs: { orderBy: { createdAt: "desc" } },
       emailJobs: { orderBy: { createdAt: "desc" }, take: 5 },
+      contacts: { orderBy: [{ isDecisionMaker: "desc" }, { createdAt: "desc" }] },
+      opportunities: {
+        orderBy: { createdAt: "desc" },
+        include: { owner: { select: { id: true, name: true, email: true } } },
+      },
+      subscriptions: { orderBy: { createdAt: "desc" }, take: 10 },
+      suggestions: { where: { status: "PENDING" }, orderBy: { createdAt: "desc" }, take: 5 },
+      instagramConversations: {
+        orderBy: { lastMessageAt: "desc" },
+        take: 3,
+        include: {
+          messages: {
+            orderBy: { sentAt: "asc" },
+            take: 30,
+            include: { sentByUser: { select: { name: true, email: true } } },
+          },
+        },
+      },
     },
   });
 }
@@ -121,7 +139,7 @@ export async function getStatusCounts(viewer?: ViewerScope): Promise<Record<stri
 
 export async function getSalonOwners() {
   return prisma.user.findMany({
-    where: { active: true, assignedSalons: { some: {} } },
+    where: { active: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true, email: true },
   });

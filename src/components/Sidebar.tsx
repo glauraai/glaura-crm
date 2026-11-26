@@ -5,8 +5,16 @@ import { canAccessInstagram } from "@/lib/access";
 export function Sidebar({ user }: { user: { name?: string | null; email?: string | null; role?: string } }) {
   const admin = user.role === "ADMIN";
   const links = [
-    ["/dashboard", "Aujourd’hui", "◷"], ["/taches", admin ? "Suivi des actions" : "Mes tâches", "✓"],
-    ["/prospection", admin ? "Prospection" : "Mes prospects", "⌕"], ["/salons", "Salons et suivi", "▤"], ["/playbook", "Playbook", "☰"], ["/liens", "Liens utiles", "⧉"],
+    ["/dashboard", "Aujourd’hui", "◷"],
+    ["/pipeline", "Pipeline", "▦"],
+    ["/taches", admin ? "Suivi des actions" : "Mes tâches", "✓"],
+    ["/suggestions", "Suggestions IA", "✦"],
+    ["/prospection", admin ? "Prospection" : "Mes prospects", "⌕"],
+    ["/salons", "Salons et suivi", "▤"],
+    ["/tarifs", "Tarifs & Paiement", "€"],
+    ["/remuneration", admin ? "Commissions & Paie" : "Ma rémunération", "◈"],
+    ["/playbook", "Playbook", "☰"],
+    ["/liens", "Liens utiles", "⧉"],
     ...(canAccessInstagram(user) ? [["/instagram", "Messagerie Instagram", "◎"], ["/automatisations", "Automatisations", "⟳"]] : []),
     ...(admin ? [["/modeles", "Modèles d’email", "✉"], ["/onboarding", "Création de comptes salons", "↗"], ["/administration", "Équipe et accès", "⚙"]] : []),
   ];
