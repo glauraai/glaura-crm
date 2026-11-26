@@ -1,6 +1,6 @@
 "use server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/access";
+import { requireAdmin, requireMember } from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -25,6 +25,17 @@ export async function setMemberBookingUrl(fd: FormData) {
   const d = z.object({ id: z.string().min(1), bookingUrl }).parse(Object.fromEntries(fd));
   await prisma.user.update({ where: { id: d.id }, data: { bookingUrl: d.bookingUrl } });
   revalidatePath("/administration");
+}
+
+/** A member sets their own demo booking link (Google appointment schedule…). */
+export async function setMyBookingUrl(fd: FormData) {
+  const me = await requireMember();
+  const parsed = bookingUrl.safeParse(fd.get("bookingUrl") ?? "");
+  if (parsed.success) {
+    await prisma.user.update({ where: { id: me.id }, data: { bookingUrl: parsed.data } });
+    revalidatePath("/liens");
+  }
+  redirect(parsed.success ? "/liens" : `/liens?error=${encodeURIComponent("Saisissez un lien https valide, par exemple https://calendar.app.google/…")}`);
 }
 
 export async function setMemberActive(fd: FormData) {

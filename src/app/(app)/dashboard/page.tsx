@@ -8,6 +8,8 @@ import { getSalonOwners } from "@/lib/salons";
 import { TYPE_STYLE } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { SalonType } from "@/generated/prisma/enums";
+import { Suspense } from "react";
+import { AvailabilityPanel } from "@/components/AvailabilityPanel";
 
 const card = "rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200";
 const TYPES: Array<{ type: SalonType; label: string }> = [
@@ -99,6 +101,14 @@ export default async function DashboardPage({
         <div className={card}><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold text-slate-950">Prochaines actions</h2><Link href="/taches" className="text-sm font-medium text-rose-700">Toutes les tâches →</Link></div><div className="divide-y divide-slate-100">{openTasks.map(task => <Link key={task.id} href="/taches" className="flex items-start justify-between gap-3 py-3"><div><p className="text-sm font-medium text-slate-900">{task.title}</p><p className="mt-1 text-xs text-slate-500">{task.salon?.name ?? task.prospect?.name ?? "Tâche interne"} · {task.assignedTo.name ?? task.assignedTo.email}</p></div><span className={`shrink-0 text-xs ${task.dueAt < new Date() ? "text-amber-700" : "text-slate-500"}`}>{frenchDate(task.dueAt)}</span></Link>)}{!openTasks.length && <p className="py-8 text-sm text-slate-500">Aucune tâche ouverte. Préparez vos prochaines actions depuis la base de prospects.</p>}</div></div>
         <div className="grid content-start gap-3"><Link href="/taches" className={card}><p className="text-sm text-slate-500">Tâches en retard</p><p className="mt-2 text-3xl font-semibold text-amber-700">{overdueCount}</p></Link>{isAdmin && <Link href="/prospection?owner=none" className={card}><p className="text-sm text-slate-500">Prospects à attribuer</p><p className="mt-2 text-3xl font-semibold text-slate-950">{noOwnerCount}</p></Link>}{session?.user && canAccessInstagram(session.user) && <Link href="/instagram" className={card}><p className="text-sm text-slate-500">Conversations Instagram à traiter</p><p className="mt-2 text-3xl font-semibold text-violet-700">{instagramCount}</p></Link>}</div>
       </section>
+      <Suspense fallback={<div className={cn(card, "mb-6 text-sm text-slate-400")}>Chargement des disponibilités…</div>}>
+        <AvailabilityPanel
+          team={isAdmin && !selectedOwner}
+          person={selectedOwner ? { email: selectedOwner.email ?? "", label: `Disponibilités de ${selectedOwner.name ?? selectedOwner.email}` } : session.user.email ? { email: session.user.email, label: "Mes disponibilités" } : undefined}
+          day={sp.dispo}
+          hrefForDay={(day) => `/dashboard?dispo=${day}`}
+        />
+      </Suspense>
       <h2 className="mb-3 text-lg font-semibold text-slate-900">Vue d’ensemble des salons</h2>
       <section className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <MetricCard dark label="Total" value={dashboard.totalSalons} href={salonHref()} />
