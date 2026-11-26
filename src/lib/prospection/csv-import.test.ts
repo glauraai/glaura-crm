@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLeads, decodeCsvBytes, detectMapping, metiersFrom, parseCsv, rowToLead } from "./csv-import";
+import { buildLeads, decodeCsvBytes, detectMapping, matchOwner, metiersFrom, parseCsv, rowToLead } from "./csv-import";
 
 const importText = (text: string) => { const parsed = parseCsv(text); return { parsed, mapping: detectMapping(parsed), leads: buildLeads(parsed, detectMapping(parsed)) }; };
 
@@ -60,6 +60,11 @@ describe("detectMapping", () => {
     const { mapping } = importText("\uFEFFNom du salon;Adresse;Code postal;Ville;Téléphone;E-mail;Instagram;Site web;Lien Planity / Treatwell;Contact;Métier;Notes\r\nSalon Exemple;12 rue Oberkampf;75011;Paris;06 12 34 56 78;contact@salon-exemple.fr;@salonexemple;https://salon-exemple.fr;;Léa;Ongles;Rappeler lundi");
     expect(mapping).toEqual(["name", "address", "postalCode", "city", "phone", "email", "instagram", "website", "bookingUrl", "contactName", "metier", "notes"]);
   });
+  it("recognizes the sales owner column", () => {
+    expect(importText("Nom,Commercial\nA,Léa\n").mapping).toEqual(["name", "owner"]);
+    expect(importText("Salon,Responsable,Gérante\nA,Léa,Sophie\n").mapping).toEqual(["name", "owner", "contactName"]);
+    expect(importText("Nom,Lead Owner\nA,lea@glaura.ai\n").mapping).toEqual(["name", "owner"]);
+  });
   it("uses each field once", () => {
     const { mapping } = importText("Téléphone,Tel portable\n0611223344,0711223344\n");
     expect(mapping.filter(f => f === "phone")).toHaveLength(1);
@@ -99,5 +104,28 @@ describe("metiersFrom", () => {
     expect(metiersFrom("Onglerie & Cils")).toEqual(["ONGLES", "ESTHETIQUE"]);
     expect(metiersFrom("Barber shop")).toEqual(["BARBIER"]);
     expect(metiersFrom("Tatouage")).toEqual(["AUTRE"]);
+  });
+});
+
+describe("matchOwner", () => {
+  const users = [
+    { id: "lea", name: "Léa Martin", email: "lea.martin@glaura.ai" },
+    { id: "max", name: "Maxime Dubois", email: "max@glaura.ai" },
+    { id: "lea2", name: "Léa Bernard", email: "lb@glaura.ai" },
+  ];
+  it("matches by e-mail, full name and e-mail local part", () => {
+    expect(matchOwner("MAX@glaura.ai", users)).toBe("max");
+    expect(matchOwner("lea martin", users)).toBe("lea");
+    expect(matchOwner("lea.martin", users)).toBe("lea");
+  });
+  it("matches a first or last name only when unambiguous", () => {
+    expect(matchOwner("Maxime", users)).toBe("max");
+    expect(matchOwner("Bernard", users)).toBe("lea2");
+    expect(matchOwner("Léa", users)).toBeNull();
+  });
+  it("returns null for unknown or empty values", () => {
+    expect(matchOwner("Paul", users)).toBeNull();
+    expect(matchOwner("", users)).toBeNull();
+    expect(matchOwner(null, users)).toBeNull();
   });
 });
