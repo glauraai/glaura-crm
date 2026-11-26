@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   IMPORT_BATCH_SIZE, LEAD_FIELDS, LEAD_FIELD_LABEL, MAX_IMPORT_ROWS,
-  buildLeads, decodeCsvBytes, detectMapping, parseCsv,
+  buildLeads, decodeCsvBytes, detectMapping, matchOwner, parseCsv,
   type ColumnMapping, type LeadField, type ParsedCsv,
 } from "@/lib/prospection/csv-import";
 import { importLeadBatch } from "@/lib/prospection/import-actions";
@@ -14,19 +14,20 @@ const button = "rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white 
 
 type Owner = { id: string; name: string | null; email: string | null };
 // Semicolons + BOM: French Excel opens this with accents and columns intact.
-const TEMPLATE_CSV = "﻿" + [
-  "Nom du salon;Adresse;Code postal;Ville;Téléphone;E-mail;Instagram;Site web;Lien Planity / Treatwell;Contact;Métier;Notes",
-  "Salon Exemple;12 rue Oberkampf;75011;Paris;06 12 34 56 78;contact@salon-exemple.fr;@salonexemple;https://salon-exemple.fr;;Léa;Ongles;Rappeler lundi",
+// The "Commercial" column (name or e-mail of the rep) is only offered to admins.
+const templateCsv = (admin: boolean) => "﻿" + [
+  `Nom du salon;Adresse;Code postal;Ville;Téléphone;E-mail;Instagram;Site web;Lien Planity / Treatwell;Contact;Métier;Notes${admin ? ";Commercial" : ""}`,
+  `Salon Exemple;12 rue Oberkampf;75011;Paris;06 12 34 56 78;contact@salon-exemple.fr;@salonexemple;https://salon-exemple.fr;;Léa;Ongles;Rappeler lundi${admin ? ";Prénom Nom ou e-mail du commercial" : ""}`,
 ].join("\r\n");
 
-function downloadTemplate() {
-  const url = URL.createObjectURL(new Blob([TEMPLATE_CSV], { type: "text/csv;charset=utf-8" }));
+function downloadTemplate(admin: boolean) {
+  const url = URL.createObjectURL(new Blob([templateCsv(admin)], { type: "text/csv;charset=utf-8" }));
   const link = Object.assign(document.createElement("a"), { href: url, download: "modele-import-leads.csv" });
   link.click();
   URL.revokeObjectURL(url);
 }
 
-type Totals ={ created: number; skipped: number; alreadyInCrm: number; failedBatches: number };
+type Totals = { created: number; skipped: number; alreadyInCrm: number; failedBatches: number; unmatchedOwners: string[] };
 
 export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] }) {
   const router = useRouter();
@@ -49,7 +50,8 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
       const parsed = parseCsv(decodeCsvBytes(new Uint8Array(await selected.arrayBuffer())));
       if (!parsed.rows.length) { setReadError("Ce fichier ne contient aucune ligne de données."); return; }
       setFile({ name: selected.name, parsed });
-      setMapping(detectMapping(parsed));
+      // Reps always own what they import: their "Commercial" column stays in the notes.
+      setMapping(detectMapping(parsed).map(f => (f === "owner" && !admin ? null : f)));
     } catch {
       setReadError("Impossible de lire ce fichier. Exportez-le au format CSV depuis Excel ou Google Sheets.");
     }
@@ -62,7 +64,7 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
 
   async function runImport() {
     const batches = Array.from({ length: Math.ceil(leads.length / IMPORT_BATCH_SIZE) }, (_, i) => leads.slice(i * IMPORT_BATCH_SIZE, (i + 1) * IMPORT_BATCH_SIZE));
-    let acc: Totals = { created: 0, skipped: 0, alreadyInCrm: 0, failedBatches: 0 };
+    let acc: Totals = { created: 0, skipped: 0, alreadyInCrm: 0, failedBatches: 0, unmatchedOwners: [] };
     setTotals(null);
     setProgress({ done: 0, total: leads.length });
     for (const [i, batch] of batches.entries()) {
@@ -70,7 +72,7 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
       let result = await importLeadBatch({ leads: batch, ownerId: admin ? ownerId : null }).catch(() => null);
       if (!result?.ok) result = await importLeadBatch({ leads: batch, ownerId: admin ? ownerId : null }).catch(() => null);
       acc = result?.ok
-        ? { ...acc, created: acc.created + result.created, skipped: acc.skipped + result.skipped, alreadyInCrm: acc.alreadyInCrm + result.alreadyInCrm }
+        ? { ...acc, created: acc.created + result.created, skipped: acc.skipped + result.skipped, alreadyInCrm: acc.alreadyInCrm + result.alreadyInCrm, unmatchedOwners: [...new Set([...acc.unmatchedOwners, ...result.unmatchedOwners])] }
         : { ...acc, failedBatches: acc.failedBatches + 1 };
       if (result && !result.ok && i === 0) setReadError(result.error);
       setProgress({ done: Math.min((i + 1) * IMPORT_BATCH_SIZE, leads.length), total: leads.length });
@@ -80,6 +82,14 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
     router.refresh();
   }
 
+  const ownerColumn = admin && mapping.includes("owner");
+  const defaultOwnerLabel = ownerId === "me" ? "vous" : ownerId ? users.find(u => u.id === ownerId)?.name ?? "le responsable choisi" : "personne (non attribué)";
+  const ownerName = (raw: string | null) => {
+    if (!raw) return <span className="text-slate-400">→ {defaultOwnerLabel}</span>;
+    const id = matchOwner(raw, users);
+    const user = users.find(u => u.id === id);
+    return user ? <span className="font-medium text-emerald-700">{user.name ?? user.email}</span> : <span className="text-amber-700">« {raw} » inconnu → {defaultOwnerLabel}</span>;
+  };
   const sample = (col: number) => file?.parsed.rows.find(r => r[col]?.trim())?.[col] ?? "";
 
   return (
@@ -109,7 +119,7 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
           <button type="button" onClick={() => fileInput.current?.click()} disabled={busy} className={button}>
             {file ? "Choisir un autre fichier" : "Télécharger mon fichier CSV"}
           </button>
-          <button type="button" onClick={downloadTemplate} className={input}>Télécharger le modèle CSV</button>
+          <button type="button" onClick={() => downloadTemplate(admin)} className={input}>Télécharger le modèle CSV</button>
         </div>
         <p className="text-xs text-slate-500">Formats acceptés : .csv, .tsv, .txt · jusqu’à {MAX_IMPORT_ROWS.toLocaleString("fr-FR")} lignes</p>
       </div>
@@ -127,14 +137,15 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
             <td className="max-w-64 truncate py-2 pr-4 text-slate-500" title={sample(col)}>{sample(col) || "—"}</td>
             <td className="py-2"><select aria-label={`Champ pour ${header}`} value={mapping[col] ?? ""} onChange={e => setColumn(col, (e.target.value || null) as LeadField | null)} className={input}>
               <option value="">Garder dans les notes</option>
-              {LEAD_FIELDS.map(f => <option key={f} value={f}>{LEAD_FIELD_LABEL[f]}</option>)}
+              {LEAD_FIELDS.filter(f => admin || f !== "owner").map(f => <option key={f} value={f}>{LEAD_FIELD_LABEL[f]}</option>)}
             </select></td>
           </tr>)}</tbody></table></div>
+        {admin && !ownerColumn && <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">Pour répartir les leads entre plusieurs commerciaux, ajoutez une colonne « Commercial » (prénom, nom ou e-mail).</p>}
         {!mapping.includes("name") && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Aucune colonne « Nom du salon » : le contact, l’Instagram, l’e-mail ou le téléphone servira de nom.</p>}
-        <div><h3 className="text-sm font-semibold text-slate-900">Aperçu</h3><div className="mt-2 overflow-x-auto rounded-lg border border-slate-100"><table className="w-full text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr>{["Salon", "Adresse", "Téléphone", "E-mail", "Instagram", "Contact"].map(t => <th key={t} className="px-3 py-2 font-medium">{t}</th>)}</tr></thead>
-          <tbody className="divide-y divide-slate-100">{leads.slice(0, 5).map((l, i) => <tr key={i}><td className="px-3 py-2 font-medium text-slate-900">{l.name}</td><td className="px-3 py-2">{[l.address, l.postalCode, l.city].filter(Boolean).join(" · ") || "—"}</td><td className="px-3 py-2">{l.phone ?? "—"}</td><td className="px-3 py-2">{l.email ?? "—"}</td><td className="px-3 py-2">{l.instagram ? `@${l.instagram}` : "—"}</td><td className="px-3 py-2">{l.contactName ?? "—"}</td></tr>)}</tbody></table></div></div>
+        <div><h3 className="text-sm font-semibold text-slate-900">Aperçu</h3><div className="mt-2 overflow-x-auto rounded-lg border border-slate-100"><table className="w-full text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr>{["Salon", "Adresse", "Téléphone", "E-mail", "Instagram", "Contact", ...(ownerColumn ? ["Commercial"] : [])].map(t => <th key={t} className="px-3 py-2 font-medium">{t}</th>)}</tr></thead>
+          <tbody className="divide-y divide-slate-100">{leads.slice(0, 5).map((l, i) => <tr key={i}><td className="px-3 py-2 font-medium text-slate-900">{l.name}</td><td className="px-3 py-2">{[l.address, l.postalCode, l.city].filter(Boolean).join(" · ") || "—"}</td><td className="px-3 py-2">{l.phone ?? "—"}</td><td className="px-3 py-2">{l.email ?? "—"}</td><td className="px-3 py-2">{l.instagram ? `@${l.instagram}` : "—"}</td><td className="px-3 py-2">{l.contactName ?? "—"}</td>{ownerColumn && <td className="px-3 py-2">{ownerName(l.owner)}</td>}</tr>)}</tbody></table></div></div>
         <div className="flex flex-wrap items-end gap-3">
-          {admin && <label className="text-sm text-slate-600">Attribuer à<select value={ownerId} onChange={e => setOwnerId(e.target.value)} className={`${input} ml-2`}><option value="me">Moi</option><option value="">Non attribués</option>{users.map(u => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}</select></label>}
+          {admin && <label className="text-sm text-slate-600">{ownerColumn ? "Si la colonne Commercial est vide ou inconnue, attribuer à" : "Attribuer à"}<select value={ownerId} onChange={e => setOwnerId(e.target.value)} className={`${input} ml-2`}><option value="me">Moi</option><option value="">Non attribués</option>{users.map(u => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}</select></label>}
           <button type="button" onClick={runImport} disabled={busy || !leads.length} className={button}>
             {busy ? `Import en cours… ${progress?.done}/${progress?.total}` : `Importer ${leads.length.toLocaleString("fr-FR")} lead(s)`}
           </button>
@@ -146,6 +157,7 @@ export function LeadImporter({ admin, users }: { admin: boolean; users: Owner[] 
         {totals.created.toLocaleString("fr-FR")} lead(s) importé(s)
         {totals.skipped > 0 && ` · ${totals.skipped.toLocaleString("fr-FR")} déjà présent(s), ignoré(s)`}
         {totals.alreadyInCrm > 0 && ` · ${totals.alreadyInCrm.toLocaleString("fr-FR")} déjà dans les salons du CRM`}
+        {totals.unmatchedOwners.length > 0 && ` · commercial(aux) non reconnu(s), leads attribués par défaut : ${totals.unmatchedOwners.join(", ")}`}
         {totals.failedBatches > 0 && ` · ${totals.failedBatches} lot(s) non importé(s) : relancez le même fichier, rien ne sera dupliqué.`}
       </p>}
     </details>

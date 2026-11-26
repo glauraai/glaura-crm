@@ -12,7 +12,7 @@ import type { Metier } from "@/generated/prisma/enums";
 
 export const LEAD_FIELDS = [
   "name", "address", "postalCode", "city", "phone", "email", "instagram",
-  "website", "bookingUrl", "contactName", "metier", "rating", "reviewCount", "notes",
+  "website", "bookingUrl", "contactName", "metier", "rating", "reviewCount", "notes", "owner",
 ] as const;
 export type LeadField = (typeof LEAD_FIELDS)[number];
 
@@ -21,6 +21,7 @@ export const LEAD_FIELD_LABEL: Record<LeadField, string> = {
   phone: "Téléphone", email: "E-mail", instagram: "Instagram", website: "Site web",
   bookingUrl: "Lien Planity / Treatwell", contactName: "Contact", metier: "Métier",
   rating: "Note (/5)", reviewCount: "Nombre d’avis", notes: "Notes",
+  owner: "Commercial attribué",
 };
 
 /** Column index → field, or null for "keep in notes". */
@@ -40,6 +41,7 @@ export type ImportedLead = {
   planityUrl: string | null;
   treatwellUrl: string | null;
   contactName: string | null;
+  owner: string | null; // raw "Commercial" cell, resolved to a CRM user server-side
   metiers: Metier[];
   rating: number | null;
   reviewCount: number;
@@ -157,10 +159,12 @@ const SYNONYMS: Record<LeadField, string[]> = {
   instagram: ["instagram", "insta", "ig", "compte instagram", "lien instagram", "instagram url", "handle"],
   website: ["site", "site web", "website", "url", "web", "site internet", "lien", "link"],
   bookingUrl: ["planity", "treatwell", "booksy", "fresha", "lien de reservation", "lien reservation", "booking", "booking url", "reservation", "url planity", "url treatwell", "lien planity", "lien treatwell"],
-  contactName: ["contact", "nom du contact", "nom contact", "gerant", "gerante", "responsable", "proprietaire", "owner", "interlocuteur", "prenom", "contact name", "manager", "dirigeant", "prenom nom", "nom prenom", "decideur"],
+  contactName: ["contact", "nom du contact", "nom contact", "gerant", "gerante", "proprietaire", "interlocuteur", "prenom", "contact name", "manager", "dirigeant", "prenom nom", "nom prenom", "decideur"],
   metier: ["metier", "categorie", "category", "type", "activite", "specialite", "secteur", "type de salon", "categories"],
   rating: ["note", "rating", "note google", "etoiles", "stars", "note moyenne", "average rating"],
   reviewCount: ["avis", "nombre d avis", "nb avis", "nombre avis", "reviews", "review count", "nb d avis", "reviews count", "nombre de commentaires"],
+  // "Responsable"/"Owner" is the sales owner in our CRM and in HubSpot/Airtable exports.
+  owner: ["commercial", "commerciale", "commercial attribue", "attribution", "attribue a", "attribuee a", "assigne a", "assignee a", "responsable", "responsable commercial", "owner", "account owner", "lead owner", "sales", "sales rep", "vendeur", "vendeuse", "email commercial", "agent commercial"],
   notes: ["notes", "commentaire", "commentaires", "remarques", "remarque", "comments", "comment", "description", "infos", "informations", "observations", "memo"],
 };
 
@@ -351,7 +355,7 @@ export function rowToLead(row: string[], headers: string[], mapping: ColumnMappi
 
   return {
     name, address, postalCode, city, phone, email: validEmail, instagram, website,
-    planityUrl, treatwellUrl, contactName,
+    planityUrl, treatwellUrl, contactName, owner: clip(values.owner, 200),
     metiers: values.metier ? metiersFrom(values.metier) : [],
     rating: rating !== null && rating >= 0 && rating <= 5 ? rating : null,
     reviewCount: reviewCount !== null && reviewCount >= 0 ? Math.min(Math.round(reviewCount), 10_000_000) : 0,
@@ -363,4 +367,28 @@ export function rowToLead(row: string[], headers: string[], mapping: ColumnMappi
 export function buildLeads(parsed: ParsedCsv, mapping: ColumnMapping): ImportedLead[] {
   const offset = parsed.hasHeader ? 2 : 1;
   return parsed.rows.slice(0, MAX_IMPORT_ROWS).map((row, i) => rowToLead(row, parsed.headers, mapping, i + offset));
+}
+
+// ── Sales owner ──────────────────────────────────────────────────
+
+export type OwnerCandidate = { id: string; name: string | null; email: string | null };
+
+/**
+ * Resolves a "Commercial" cell to a CRM user: e-mail, full name, e-mail local
+ * part ("lea.martin"), then a first name or partial name that only one member
+ * carries. Returns null when unknown or ambiguous — the caller falls back.
+ */
+export function matchOwner(raw: string | null | undefined, users: OwnerCandidate[]): string | null {
+  const value = raw?.trim().toLowerCase() ?? "";
+  const wanted = normalizeHeader(value);
+  if (!wanted) return null;
+  const byEmail = users.find(u => u.email?.toLowerCase() === value);
+  if (byEmail) return byEmail.id;
+  const nameOf = (u: OwnerCandidate) => normalizeHeader(u.name ?? "");
+  const localOf = (u: OwnerCandidate) => normalizeHeader(u.email?.split("@")[0] ?? "");
+  const exact = users.filter(u => nameOf(u) === wanted || localOf(u) === wanted);
+  if (exact.length === 1) return exact[0].id;
+  const tokens = wanted.split(" ");
+  const partial = users.filter(u => { const t = `${nameOf(u)} ${localOf(u)}`.split(" "); return tokens.every(w => t.includes(w)); });
+  return partial.length === 1 ? partial[0].id : null;
 }
