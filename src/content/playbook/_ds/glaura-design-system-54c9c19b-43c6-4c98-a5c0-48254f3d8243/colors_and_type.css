@@ -1,0 +1,224 @@
+/* =========================================================================
+   Glaura Design System — Colors & Typography Tokens
+   Import this first. Everything in the system extends these variables.
+   ========================================================================= */
+
+/* Web fonts — Google Fonts substitution; flagged in README */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* -------------------------------------------------------------------------
+     COLOR — BRAND
+     ------------------------------------------------------------------------- */
+  /* Magenta (primary) — the voice of the brand */
+  --magenta-50:  #FFF1F5;
+  --magenta-100: #FFD6E1;
+  --magenta-200: #FFA8C2;
+  --magenta-300: #FF6E97;
+  --magenta-400: #F73874;
+  --magenta-500: #E50050;  /* PRIMARY */
+  --magenta-600: #C40044;
+  --magenta-700: #9E0036;
+  --magenta-800: #7A0029;
+  --magenta-900: #50001B;
+
+  /* Gold (secondary) — premium, ratings, Pro tier */
+  --gold-50:  #FBF6E5;
+  --gold-100: #F4E8B6;
+  --gold-200: #ECD884;
+  --gold-300: #E0C354;
+  --gold-400: #D4B23A;
+  --gold-500: #C9A227;  /* SECONDARY */
+  --gold-600: #A8851D;
+  --gold-700: #856815;
+  --gold-800: #5F4B0F;
+  --gold-900: #3A2D08;
+
+  /* Laura — Glaura's assistant identity */
+  --laura-pink:   #FF5791;
+  --laura-rose:   #EB0050;
+  --laura-deep:   #D00049;
+  --laura-gradient: linear-gradient(155deg, #FF5791 0%, #EB0050 50%, #D00049 100%); /* @kind color */
+  --font-laura:   'Poppins', 'Inter', sans-serif; /* @kind font */ /* wordmark only: 500, -0.03em, lowercase */
+
+  /* Warm neutrals — cream → stone → ink */
+  --cream-50:  #FFFBF7;  /* APP BACKGROUND — never #FFF */
+  --cream-100: #FBF5EE;
+  --stone-100: #F5EFE6;
+  --stone-200: #EFE9E2;  /* hairline border */
+  --stone-300: #DCD4CA;  /* input border resting */
+  --stone-400: #B8AEA0;  /* placeholder text */
+  --stone-500: #8A8175;
+  --stone-600: #5E574E;
+  --stone-700: #423D37;
+  --stone-800: #322E29;
+  --ink-900:   #2D2D2D;  /* BODY TEXT — never #000 */
+
+  /* -------------------------------------------------------------------------
+     COLOR — SEMANTIC
+     ------------------------------------------------------------------------- */
+  --bg:            var(--cream-50);
+  --bg-elevated:   #FFFFFF;     /* used inside modals against cream */
+  --bg-panel:      var(--stone-100);
+  --bg-inverse:    var(--ink-900);
+
+  --fg:            var(--ink-900);
+  --fg-muted:      var(--stone-600);
+  --fg-subtle:     var(--stone-500);
+  --fg-placeholder:var(--stone-400);
+  --fg-inverse:    var(--cream-50);
+  --fg-on-magenta: var(--cream-50);
+  --fg-on-gold:    var(--ink-900);
+
+  --border-hairline: var(--stone-200);
+  --border-input:    var(--stone-300);
+  --border-strong:   var(--ink-900);
+  --border-focus:    var(--magenta-500);
+
+  --link:          var(--magenta-500);
+  --link-hover:    var(--magenta-600);
+
+  /* States */
+  --success: #1F7A3A;
+  --warning: var(--gold-500);
+  --danger:  var(--magenta-600);
+  --info:    var(--ink-900);
+
+  /* Overlays */
+  --scrim-modal:   rgba(45, 28, 28, 0.48);
+  --scrim-video:   linear-gradient(180deg, transparent 0%, transparent 50%, rgba(0,0,0,0.65) 100%); /* @kind color */
+  --frost-cream:   rgba(255, 251, 247, 0.72);
+  --frost-ink:     rgba(45, 45, 45, 0.55);
+
+  /* -------------------------------------------------------------------------
+     TYPOGRAPHY — FAMILIES
+     ------------------------------------------------------------------------- */
+  --font-display: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+  --font-body:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:    ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* TYPE SCALE (px) */
+  --text-xs:   12px;
+  --text-sm:   14px;
+  --text-base: 16px;
+  --text-md:   18px;
+  --text-lg:   22px;
+  --text-xl:   28px;
+  --text-2xl:  36px;
+  --text-3xl:  48px;
+  --text-4xl:  64px;
+
+  /* LINE HEIGHTS */
+  --lh-display: 1.05; /* @kind font */
+  --lh-heading: 1.15; /* @kind font */
+  --lh-body:    1.5; /* @kind font */
+  --lh-tight:   1.25; /* @kind font */
+
+  /* WEIGHTS */
+  --w-regular:  400; /* @kind font */
+  --w-medium:   500; /* @kind font */
+  --w-semibold: 600; /* @kind font */
+  --w-bold:     700; /* @kind font */
+
+  /* TRACKING */
+  --tracking-tight:  -0.02em; /* @kind font */
+  --tracking-normal: 0; /* @kind font */
+  --tracking-wide:   0.04em; /* @kind font */
+  --tracking-caps:   0.08em; /* @kind font */
+
+  /* -------------------------------------------------------------------------
+     SPACING (4px base)
+     ------------------------------------------------------------------------- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-14: 56px;
+  --space-20: 80px;
+
+  /* -------------------------------------------------------------------------
+     RADII
+     ------------------------------------------------------------------------- */
+  --radius-input: 14px;
+  --radius-card:  20px;
+  --radius-sheet: 24px;
+  --radius-pill:  999px;
+  --radius-image: 16px;
+
+  /* -------------------------------------------------------------------------
+     SHADOWS
+     ------------------------------------------------------------------------- */
+  --shadow-sm:    0 1px 2px rgba(45, 28, 28, 0.04), 0 1px 3px rgba(45, 28, 28, 0.06);
+  --shadow-md:    0 4px 12px rgba(45, 28, 28, 0.06), 0 2px 4px rgba(45, 28, 28, 0.04);
+  --shadow-lg:    0 12px 32px rgba(45, 28, 28, 0.10), 0 4px 8px rgba(45, 28, 28, 0.06);
+  --shadow-xl:    0 24px 56px rgba(45, 28, 28, 0.14), 0 8px 16px rgba(45, 28, 28, 0.08);
+  --shadow-glow:  0 8px 24px rgba(229, 0, 80, 0.24);
+  --shadow-inset: inset 0 1px 2px rgba(45, 28, 28, 0.06);
+
+  /* -------------------------------------------------------------------------
+     MOTION
+     ------------------------------------------------------------------------- */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* @kind other */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* @kind other */
+  --dur-fast:    150ms; /* @kind other */
+  --dur-base:    250ms; /* @kind other */
+  --dur-slow:    400ms; /* @kind other */
+
+  /* -------------------------------------------------------------------------
+     LAYOUT
+     ------------------------------------------------------------------------- */
+  --max-content: 1280px; /* @kind spacing */
+  --max-reading: 720px; /* @kind spacing */
+  --sidebar-w:   240px; /* @kind spacing */
+}
+
+/* =========================================================================
+   SEMANTIC TYPE STYLES
+   Reusable text classes — apply to elements directly.
+   ========================================================================= */
+
+.t-display-xl { font-family: var(--font-display); font-size: var(--text-4xl); line-height: var(--lh-display); font-weight: var(--w-semibold); letter-spacing: var(--tracking-tight); color: var(--fg); }
+.t-display-lg { font-family: var(--font-display); font-size: var(--text-3xl); line-height: var(--lh-display); font-weight: var(--w-semibold); letter-spacing: var(--tracking-tight); color: var(--fg); }
+.t-display-md { font-family: var(--font-display); font-size: var(--text-2xl); line-height: var(--lh-heading); font-weight: var(--w-semibold); letter-spacing: var(--tracking-tight); color: var(--fg); }
+
+.t-h1 { font-family: var(--font-body); font-size: var(--text-2xl); line-height: var(--lh-heading); font-weight: var(--w-bold); color: var(--fg); letter-spacing: var(--tracking-tight); }
+.t-h2 { font-family: var(--font-body); font-size: var(--text-xl); line-height: var(--lh-heading); font-weight: var(--w-semibold); color: var(--fg); letter-spacing: var(--tracking-tight); }
+.t-h3 { font-family: var(--font-body); font-size: var(--text-lg); line-height: var(--lh-heading); font-weight: var(--w-semibold); color: var(--fg); }
+.t-h4 { font-family: var(--font-body); font-size: var(--text-md); line-height: var(--lh-tight);   font-weight: var(--w-semibold); color: var(--fg); }
+
+.t-body-lg { font-family: var(--font-body); font-size: var(--text-md);   line-height: var(--lh-body); color: var(--fg); }
+.t-body    { font-family: var(--font-body); font-size: var(--text-base); line-height: var(--lh-body); color: var(--fg); }
+.t-body-sm { font-family: var(--font-body); font-size: var(--text-sm);   line-height: var(--lh-body); color: var(--fg); }
+
+.t-meta    { font-family: var(--font-body); font-size: var(--text-sm); line-height: var(--lh-tight); color: var(--fg-muted); font-weight: var(--w-medium); }
+.t-caption { font-family: var(--font-body); font-size: var(--text-xs); line-height: var(--lh-tight); color: var(--fg-subtle); }
+.t-label   { font-family: var(--font-body); font-size: var(--text-xs); line-height: var(--lh-tight); color: var(--fg-muted); font-weight: var(--w-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+.t-overline{ font-family: var(--font-body); font-size: 11px; line-height: 1.2; color: var(--magenta-500); font-weight: var(--w-semibold); letter-spacing: var(--tracking-caps); text-transform: uppercase; }
+
+.t-price   { font-family: var(--font-body); font-weight: var(--w-semibold); font-feature-settings: "tnum" 1, "lnum" 1; }
+.t-mono    { font-family: var(--font-mono); font-size: var(--text-sm); }
+
+/* Wordmark — used in the logo */
+.t-wordmark { font-family: var(--font-display); font-weight: var(--w-semibold); font-style: normal; letter-spacing: -0.025em; }
+
+/* =========================================================================
+   BASE RESET (opt-in — apply via .glaura-reset on a root container)
+   ========================================================================= */
+.glaura-reset {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--lh-body);
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.glaura-reset *, .glaura-reset *::before, .glaura-reset *::after { box-sizing: border-box; }
+.glaura-reset h1, .glaura-reset h2, .glaura-reset h3, .glaura-reset h4 { margin: 0; }
+.glaura-reset p { margin: 0; }
+.glaura-reset button { font-family: inherit; }
