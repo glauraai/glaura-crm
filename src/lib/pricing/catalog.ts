@@ -7,7 +7,6 @@ export type GlauraPlanSpec = {
   monthlyHtCents: number;
   targetSegment: string;
   freeWebsiteOnAnnual: boolean;
-  includesLauraBoth?: boolean;
   highlights: string[];
 };
 
@@ -22,15 +21,6 @@ export const GLAURA_PLANS: readonly GlauraPlanSpec[] = [
     highlights: ["Agenda en ligne & page salon", "Réservation depuis les vidéos", "0 % commission sur vos clientes"],
   },
   {
-    code: "premium_v3",
-    stripeV3Code: "premium_v3",
-    name: "Glaura Premium (ancienne offre)",
-    monthlyHtCents: 2900,
-    targetSegment: "Salon solo (V3)",
-    freeWebsiteOnAnnual: true,
-    highlights: ["Agenda + rappels automatiques", "Promos ciblées créneau/prestation", "Site personnalisé (500 €) offert en annuel"],
-  },
-  {
     code: "salon_solo",
     stripeV3Code: "solo_pro_v3",
     name: "Salon solo (Grille 24/11)",
@@ -38,16 +28,6 @@ export const GLAURA_PLANS: readonly GlauraPlanSpec[] = [
     targetSegment: "Salon 1 praticien",
     freeWebsiteOnAnnual: true,
     highlights: ["Tout-en-un solo + fidélisation", "Relances clientes automatiques", "Site personnalisé (500 €) offert en annuel"],
-  },
-  {
-    code: "tout_en_un_v3",
-    stripeV3Code: "tout_en_un_v3",
-    name: "Glaura Tout-en-un (Laura incluse, ancienne offre)",
-    monthlyHtCents: 5900,
-    targetSegment: "Salon avec Laura IG + WA inclus",
-    freeWebsiteOnAnnual: true,
-    includesLauraBoth: true,
-    highlights: ["Salon complet + Laura Instagram & WhatsApp inclus", "Réservation 24/7 hors horaires", "Site personnalisé offert en annuel"],
   },
   {
     code: "salon_v3",
@@ -108,9 +88,7 @@ export function calculateOfferPricing(input: OfferPricingInput): OfferPricingRes
   const discount = Math.max(0, Math.min(90, Number.isFinite(input.discountPercent) ? input.discountPercent : 0));
 
   const lauraSpec = LAURA_OPTIONS.find((o) => o.code === (input.lauraChannels ?? "none")) ?? LAURA_OPTIONS[0];
-  const lauraCents = plan.includesLauraBoth && ["instagram", "whatsapp", "both"].includes(lauraSpec.code)
-    ? 0
-    : lauraSpec.monthlyHtCents;
+  const lauraCents = lauraSpec.monthlyHtCents;
   const syncCents = input.syncIncluded ? SYNC_OPTION_CENTS : 0;
 
   const listMonthlyCents = plan.monthlyHtCents + lauraCents + syncCents;

@@ -60,8 +60,7 @@ export async function requestStripeOfferLink(input: {
     input.cadence === "ANNUAL_1X" ? "annual_1x" : input.cadence === "ANNUAL_3X" ? "annual_3x" : "monthly";
   const hasLaura = Boolean(
     input.lauraChannels &&
-      ["instagram", "whatsapp", "both", "phone", "full"].includes(input.lauraChannels) &&
-      !plan.includesLauraBoth,
+      ["instagram", "whatsapp", "both", "phone", "full"].includes(input.lauraChannels),
   );
 
   const body: Record<string, unknown> = {

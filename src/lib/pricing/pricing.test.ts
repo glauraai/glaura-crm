@@ -41,6 +41,12 @@ describe("Glaura subscription pricing & payment calculator", () => {
     expect(solo?.stripeV3Code).toBe("solo_pro_v3");
   });
 
+  it("no longer offers the retired premium_v3 / tout_en_un_v3 plans", () => {
+    const codes = GLAURA_PLANS.flatMap((p) => [p.code, p.stripeV3Code]);
+    expect(codes).not.toContain("premium_v3");
+    expect(codes).not.toContain("tout_en_un_v3");
+  });
+
   it("computes Annual 3x (11 months split in 3 installments, 1 month free)", () => {
     const res = calculateOfferPricing({
       planCode: "salon_v3",
