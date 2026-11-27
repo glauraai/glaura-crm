@@ -1,7 +1,19 @@
-import { parisTime } from "@/lib/availability";
+import { DAY_END_HOUR, DAY_START_HOUR, parisTime, timeLabel } from "@/lib/availability";
 import { canonicalizePhone } from "@/lib/phone";
 import { ACTIVITY_LABEL, BOOKING_LABEL } from "@/lib/labels";
 import type { ActivityType, BookingTool, SalonStatus } from "@/generated/prisma/enums";
+
+export type DaySlot = {
+  id: string;
+  startIso: string;
+  endIso: string;
+  startLabel: string;
+  endLabel: string;
+  title: string;
+  allDay: boolean;
+  leftPct: number;
+  widthPct: number;
+};
 
 export type CalendarAttendee = {
   email: string;
@@ -305,4 +317,89 @@ export function mergeCalendarAndCrmMeetings(input: {
   }
 
   return out.sort((a, b) => a.start.getTime() - b.start.getTime());
+}
+
+/** Projects a timed or all-day event onto a single Paris day's 8h–20h timeline bar. */
+export function toDaySlot(
+  ev: { id: string; start: Date; end: Date; title: string; allDay?: boolean },
+  day: string,
+): DaySlot | null {
+  const dayStart = parisTime(day, 0).getTime();
+  const dayEnd = parisTime(day, 24).getTime();
+  if (ev.end.getTime() <= dayStart || ev.start.getTime() >= dayEnd) return null;
+
+  const windowStart = parisTime(day, DAY_START_HOUR).getTime();
+  const windowEnd = parisTime(day, DAY_END_HOUR).getTime();
+  const span = windowEnd - windowStart;
+
+  const allDay = Boolean(ev.allDay);
+  const clippedStart = Math.max(ev.start.getTime(), windowStart);
+  const clippedEnd = Math.min(ev.end.getTime(), windowEnd);
+  const hasBar = !allDay && clippedEnd > clippedStart;
+
+  return {
+    id: ev.id,
+    startIso: ev.start.toISOString(),
+    endIso: ev.end.toISOString(),
+    startLabel: allDay ? "Journée" : timeLabel(ev.start),
+    endLabel: allDay ? "" : timeLabel(ev.end),
+    title: ev.title || "Occupé",
+    allDay,
+    leftPct: hasBar ? ((clippedStart - windowStart) / span) * 100 : 0,
+    widthPct: hasBar ? Math.max(((clippedEnd - clippedStart) / span) * 100, 1.2) : 0,
+  };
+}
+
+/** Returns timed slots that overlap `[proposedStart, proposedStart + durationMin)`. Ignores all-day banners. */
+export function findSlotConflicts<T extends Pick<DaySlot, "startIso" | "endIso" | "allDay">>(
+  proposedStart: Date,
+  durationMin: number,
+  slots: T[],
+): T[] {
+  const startMs = proposedStart.getTime();
+  const endMs = startMs + Math.max(15, durationMin) * 60_000;
+  return slots.filter((slot) => {
+    if (slot.allDay) return false;
+    const s = new Date(slot.startIso).getTime();
+    const e = new Date(slot.endIso).getTime();
+    return startMs < e && endMs > s;
+  });
+}
+
+const CANDIDATE_TIMES = [
+  "09:00",
+  "10:00",
+  "11:00",
+  "12:00",
+  "14:00",
+  "15:00",
+  "16:00",
+  "17:00",
+  "18:00",
+  "09:30",
+  "10:30",
+  "11:30",
+  "14:30",
+  "15:30",
+  "16:30",
+  "17:30",
+] as const;
+
+/** Suggests up to `maxCount` guaranteed-free Paris HH:MM start times for a meeting on `day`. */
+export function suggestFreeTimes(
+  day: string,
+  durationMin: number,
+  slots: Pick<DaySlot, "startIso" | "endIso" | "allDay">[],
+  maxCount = 6,
+): string[] {
+  const free: string[] = [];
+  for (const hhmm of CANDIDATE_TIMES) {
+    const candidate = parseParisDateTimeInput(day, hhmm);
+    if (!candidate) continue;
+    if (findSlotConflicts(candidate, durationMin, slots).length === 0) {
+      free.push(hhmm);
+      if (free.length >= maxCount) break;
+    }
+  }
+  return free.sort();
 }
