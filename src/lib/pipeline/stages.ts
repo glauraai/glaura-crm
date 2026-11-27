@@ -1,6 +1,7 @@
 import type { OpportunityStage, SalonStatus } from "@/generated/prisma/enums";
 
-export const MONTHLY_CLAIM_CAP = 120;
+export const PORTFOLIO_ACTIVE_CAP = 120;
+export const MONTHLY_CLAIM_CAP = PORTFOLIO_ACTIVE_CAP;
 
 export type PipelinePhase = "Prospection" | "Rendez-vous" | "Conversion" | "Sortie";
 
@@ -83,8 +84,12 @@ export function mapStageToSalonStatus(stage: OpportunityStage): SalonStatus {
   }
 }
 
+export function remainingPortfolioSlots(activePortfolioCount: number): number {
+  return Math.max(0, PORTFOLIO_ACTIVE_CAP - Math.max(0, activePortfolioCount));
+}
+
 export function remainingMonthlyClaims(claimedThisMonth: number): number {
-  return Math.max(0, MONTHLY_CLAIM_CAP - Math.max(0, claimedThisMonth));
+  return remainingPortfolioSlots(claimedThisMonth);
 }
 
 export function nextRoundRobinUserId(activeRepIds: readonly string[], lastAssignedId: string | null): string | null {

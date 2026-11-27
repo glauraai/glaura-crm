@@ -9,13 +9,13 @@ import { canonicalizePhone } from "@/lib/phone";
 import { convertProspectInTx } from "@/lib/prospection/convert";
 import type { OpportunityStage } from "@/generated/prisma/enums";
 import {
-  MONTHLY_CLAIM_CAP,
+  PORTFOLIO_ACTIVE_CAP,
   OPPORTUNITY_STAGE_ORDER,
   isValidStageTransitionInput,
   mapStageToSalonStatus,
   nextRoundRobinUserId,
-  startOfCurrentParisMonth,
 } from "./stages";
+import { scoreAccountGtm1Bis } from "@/lib/gtm/scoring";
 import {
   DEFAULT_PLAN_RULES,
   calculateDealCommissionBase,
@@ -227,7 +227,7 @@ export async function addContact(fd: FormData) {
 
 /**
  * Commercial 1-click claim from the shared Prospect pool into their portfolio.
- * Enforces: single owner lock + 120 new accounts/month cap per rep.
+ * Nov 27 brief: single owner lock + 120 active accounts max per portfolio (1-for-1 swap).
  */
 export async function claimProspectToPortfolio(fd: FormData) {
   const user = await requireMember();
@@ -236,14 +236,19 @@ export async function claimProspectToPortfolio(fd: FormData) {
   let createdSalonId: string | null = null;
 
   try {
-    const monthStart = startOfCurrentParisMonth();
     await prisma.$transaction(async (tx) => {
       if (!isManagerOrAdmin(user)) {
-        const claimedCount = await tx.prospect.count({
-          where: { assignedToId: user.id, claimedAt: { gte: monthStart } },
+        const activePortfolioCount = await tx.salon.count({
+          where: {
+            assignedToId: user.id,
+            archivedAt: null,
+            status: { not: "SIGNE" },
+          },
         });
-        if (claimedCount >= MONTHLY_CLAIM_CAP) {
-          throw new Error(`Plafond mensuel atteint (${MONTHLY_CLAIM_CAP} nouveaux comptes ce mois-ci).`);
+        if (activePortfolioCount >= PORTFOLIO_ACTIVE_CAP) {
+          throw new Error(
+            `Portefeuille complet (${activePortfolioCount}/${PORTFOLIO_ACTIVE_CAP} comptes actifs). Rendez d’abord un compte au pool commun (échange 1 pour 1).`,
+          );
         }
       }
 
@@ -272,12 +277,36 @@ export async function claimProspectToPortfolio(fd: FormData) {
       const salonId = await convertProspectInTx(tx, refreshed, user.id);
       if (salonId) {
         createdSalonId = salonId;
+        const gtm = scoreAccountGtm1Bis({
+          isChainOrFranchise: refreshed.aiOwnership === "chain_or_franchise",
+          instagramHandle: refreshed.instagram,
+          igStatus: refreshed.igStatus,
+          hasPlanity: Boolean(refreshed.planityUrl) || refreshed.source === "PLANITY",
+          hasTreatwell: Boolean(refreshed.treatwellUrl) || refreshed.source === "TREATWELL",
+          hasOtherBookingTool: refreshed.source === "BOOKSY" || refreshed.source === "FRESHA",
+          instagramFollowers: refreshed.instagramFollowers,
+          googleRating: refreshed.googleRating ?? refreshed.rating,
+          googleReviewCount: refreshed.googleReviewCount ?? refreshed.reviewCount,
+          postalCode: refreshed.postalCode,
+          zone: refreshed.zone,
+          address: refreshed.address,
+        });
         await tx.salon.update({
           where: { id: salonId },
           data: {
             siret: refreshed.siret ?? undefined,
             portfolioClaimedAt: now,
             portfolioClaimedById: user.id,
+            inactivityWarnedAt: null,
+            gtmScore: gtm.score,
+            gtmPriority: gtm.priority,
+            gtmAngle: gtm.angle,
+            gtmScoreBreakdown: {
+              igUnverified: gtm.igUnverified,
+              filterReason: gtm.filterReason,
+              criteria: gtm.breakdown,
+            } as unknown as import("@/generated/prisma/client").Prisma.InputJsonValue,
+            gtmScoredAt: now,
           },
         });
         const opp = await tx.opportunity.create({
@@ -296,6 +325,73 @@ export async function claimProspectToPortfolio(fd: FormData) {
   if (error) redirect(`/prospection?tab=shared&error=${encodeURIComponent(error)}`);
   if (createdSalonId) redirect(`/salons/${createdSalonId}`);
   redirect("/prospection?tab=shared");
+}
+
+/**
+ * Releases an active salon from a rep's portfolio back to the common pool (1-for-1 swap).
+ * Signed/paid accounts cannot be released.
+ */
+export async function releaseSalonToPool(fd: FormData) {
+  const user = await requireMember();
+  const salonId = z.string().min(1).parse(fd.get("salonId"));
+  const returnTo =
+    typeof fd.get("returnTo") === "string" && String(fd.get("returnTo")).startsWith("/")
+      ? String(fd.get("returnTo"))
+      : "/salons";
+
+  const salon = await prisma.salon.findFirst({
+    where: {
+      id: salonId,
+      archivedAt: null,
+      ...(isManagerOrAdmin(user) ? {} : { assignedToId: user.id }),
+    },
+    include: {
+      prospect: { select: { id: true } },
+      opportunities: { select: { id: true, stage: true, ownerLockedAt: true } },
+    },
+  });
+  if (!salon) throw new Error("Salon introuvable ou non attribué à votre portefeuille.");
+  if (
+    salon.status === "SIGNE" ||
+    salon.opportunities.some((o) => o.ownerLockedAt || ["ABONNE", "COMPTE_ACTIVE", "SIGNE", "ENCAISSE"].includes(o.stage))
+  ) {
+    throw new Error("Un compte signé ou abonné ne peut pas être rendu au pool commun.");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.salon.update({
+      where: { id: salon.id },
+      data: {
+        assignedToId: null,
+        portfolioClaimedAt: null,
+        portfolioClaimedById: null,
+        inactivityWarnedAt: null,
+      },
+    });
+    if (salon.prospect?.id) {
+      await tx.prospect.update({
+        where: { id: salon.prospect.id },
+        data: { status: "NOUVEAU", assignedToId: null, tourneeId: null, claimedAt: null },
+      });
+    }
+    await tx.salesTask.updateMany({
+      where: { salonId: salon.id, doneAt: null },
+      data: { doneAt: now, outcome: `Rendu au pool commun par ${user.name ?? user.email}.` },
+    });
+    await tx.activity.create({
+      data: {
+        salonId: salon.id,
+        userId: user.id,
+        type: "NOTE",
+        source: "MANUAL",
+        notes: `Compte rendu au pool commun par ${user.name ?? user.email} (échange portefeuille 1 pour 1).`,
+      },
+    });
+  });
+
+  revalidatePipeline(salon.id);
+  redirect(returnTo);
 }
 
 /**
