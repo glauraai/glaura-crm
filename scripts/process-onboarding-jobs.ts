@@ -33,6 +33,7 @@ import {
 } from "../src/lib/onboarding/demo-fast-path";
 import { withSalonContactLogin } from "../src/lib/onboarding/contact-login";
 import { insertWithSequenceRetry } from "../src/lib/onboarding/job-event-sequence";
+import { emptyCatalogReason } from "../src/lib/onboarding/placeholder";
 import { loadEnvConfig } from "@next/env";
 import type { PrismaClient } from "../src/generated/prisma/client";
 
@@ -366,6 +367,21 @@ async function processJob(prisma: Prisma, pipeline: Pipeline, id: string) {
         sampleServices: sampleServiceNames(extract.services.map((service) => service.service_name)),
       },
     });
+
+    // A plain CRM "Préparer le compte" job that read nothing (dead or generic
+    // booking page) must not create an empty placeholder account.
+    const emptyReason = job.config == null ? emptyCatalogReason(extract, sourceUrl) : null;
+    if (emptyReason) {
+      const finishedAt = new Date();
+      await emit("system", { type: "account_created", subtype: "failed", level: "error", text: emptyReason, data: { status: "failed", reason: "empty_catalog" } });
+      await prisma.onboardingJob.update({
+        where: { id: job.id },
+        data: { status: "FAILED", finishedAt, durationMs: finishedAt.getTime() - startedAt.getTime(), exitCode: 1, serviceCount: 0, error: emptyReason },
+      });
+      await emit("system", { type: "job_exited", subtype: "failed", data: { exitCode: 1, reason: "empty_catalog" } });
+      console.log(`onboarded ${job.id} (${sourceUrl}): failed (empty_catalog, no account)`);
+      return;
+    }
 
     // A verified OAuth handle proves control of that Instagram account, not
     // ownership of the business behind an arbitrary booking URL. Cross-check
