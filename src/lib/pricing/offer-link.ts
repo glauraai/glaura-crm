@@ -31,7 +31,7 @@ async function resolveBillingAdminToken(): Promise<string | null> {
 }
 
 /**
- * Requests a live Stripe Checkout payment link from api.glaura.ai (`POST /billing/stripe/admin-create-offer-link`)
+ * Requests a live Stripe Checkout payment link from api.glaura.ai (`POST /stripeBilling/admin-create-offer-link`)
  * when a Firebase providerId + billing admin auth are configured.
  */
 export async function requestStripeOfferLink(input: {
@@ -57,7 +57,7 @@ export async function requestStripeOfferLink(input: {
   }
 
   try {
-    const res = await fetch(`${base}/billing/stripe/admin-create-offer-link`, {
+    const res = await fetch(`${base}/stripeBilling/admin-create-offer-link`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,
