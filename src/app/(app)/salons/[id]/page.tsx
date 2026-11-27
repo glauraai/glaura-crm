@@ -12,6 +12,7 @@ import { getSalon, getAssignableUsers } from "@/lib/salons";
 import { prisma } from "@/lib/db";
 import { addReminder, approveProIdentityAndRetry, changeStatus, completeReminder, logActivity, queueFollowUpEmail, setDailyPriority, triggerOnboarding, updateSalon } from "@/lib/actions";
 import { isDailyPriorityActive } from "@/lib/dailyPriority";
+import { wasRepaired } from "@/lib/onboarding/placeholder";
 import { canRevealOnboardingPassword, prepareAccountBlocker } from "@/lib/onboarding-access";
 import { fetchCompanyUserName, onboardingPreviewValues } from "@/lib/onboarding/salon-credentials";
 import { salonPageUrl } from "@/lib/onboarding/welcome-email";
@@ -261,6 +262,9 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
                 {/* Only the job id crosses to the client — the encrypted password
                     stays server-side and is fetched on demand by the action. */}
                 {credentialJob && canRevealPassword && <OnboardingPasswordReveal jobId={credentialJob.id} />}
+                {latestJob.status === "DONE" && wasRepaired(latestJob.warnings) && (
+                  <div className="mt-1 text-xs font-medium text-emerald-700">✓ Compte existant complété avec la page de réservation</div>
+                )}
                 {latestJob.serviceCount != null && (
                   <div className="mt-1 text-xs font-medium text-slate-500">{latestJob.serviceCount} services · {latestJob.agentCount ?? 0} agents</div>
                 )}
