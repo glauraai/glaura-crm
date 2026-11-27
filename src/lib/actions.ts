@@ -18,6 +18,8 @@ import { decryptJobPassword, fetchCompanyUserName, findCredentialJob } from "@/l
 import { renderWelcomeEmail } from "@/lib/onboarding/welcome-email";
 import { getAuth as getFirebaseAuth, getDb as getFirestoreDb } from "@/lib/firebase-admin";
 import { findLinkedFirebaseAccounts, salonDeleteBlocker } from "@/lib/leads/firebase-guard";
+import { CALENDAR_SYNC_ACTIVITY_TYPES, parseParisDateTimeInput } from "@/lib/calendar-sync";
+import { createSalonCalendarEvent } from "@/lib/google-calendar";
 import type { ActivityType, BookingTool, Metier, SalonStatus, SalonType } from "@/generated/prisma/enums";
 
 async function currentUser() {
@@ -268,11 +270,87 @@ export async function logActivity(salonId: string, fd: FormData) {
   const me = await assertCanAccessSalon(salonId);
   const type = fd.get("type") as ActivityType;
   const notes = (fd.get("notes") || "").toString().trim();
-  await prisma.activity.create({ data: { salonId, userId: me.id, type, notes: notes || null } });
-  await prisma.salon.update({ where: { id: salonId }, data: { lastContactedAt: new Date(), priorityDate: null } });
+  const scheduledDate = (fd.get("scheduledDate") || "").toString().trim();
+  const scheduledTime = (fd.get("scheduledTime") || "").toString().trim();
+  const rawDuration = Number(fd.get("durationMin") ?? 45);
+  const durationMin = Number.isFinite(rawDuration) && rawDuration >= 15 && rawDuration <= 480 ? Math.round(rawDuration) : 45;
+  const scheduledAt = parseParisDateTimeInput(scheduledDate, scheduledTime);
+  const syncCalendar = fd.get("syncCalendar") === "on" || fd.get("syncCalendar") === "true";
+  const inviteSalon = fd.get("inviteSalon") === "on" || fd.get("inviteSalon") === "true";
+
+  let calendarEventId: string | null = null;
+  let calendarEventUrl: string | null = null;
+  let meetUrl: string | null = null;
+  let notice: string | null = null;
+
+  if (CALENDAR_SYNC_ACTIVITY_TYPES.has(type) && scheduledAt && syncCalendar) {
+    const salon = await prisma.salon.findUnique({
+      where: { id: salonId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        contactName: true,
+        contactEmail: true,
+        phone: true,
+        address: true,
+        instagram: true,
+        notes: true,
+        bookingTool: true,
+        assignedTo: { select: { email: true } },
+      },
+    });
+    const organizerEmail = me.email ?? salon?.assignedTo?.email ?? null;
+    if (salon && organizerEmail) {
+      const calRes = await createSalonCalendarEvent({
+        organizerEmail,
+        type: type as "VISITE" | "VISIO",
+        start: scheduledAt,
+        durationMin,
+        notes: notes || null,
+        inviteSalon,
+        salon,
+      });
+      if (calRes.ok) {
+        calendarEventId = calRes.eventId || null;
+        calendarEventUrl = calRes.htmlLink;
+        meetUrl = calRes.meetUrl;
+        notice =
+          type === "VISIO" && meetUrl
+            ? "Visio ajoutée à Google Agenda avec lien Google Meet."
+            : "Événement ajouté à Google Agenda avec les infos du salon.";
+      } else {
+        notice = calRes.error;
+      }
+    }
+  }
+
+  const now = new Date();
+  await prisma.activity.create({
+    data: {
+      salonId,
+      userId: me.id,
+      type,
+      notes: notes || null,
+      scheduledAt,
+      durationMin: scheduledAt ? durationMin : null,
+      calendarEventId,
+      calendarEventUrl,
+      meetUrl,
+    },
+  });
+  await prisma.salon.update({
+    where: { id: salonId },
+    data: {
+      lastContactedAt: now,
+      priorityDate: null,
+      ...(scheduledAt && scheduledAt > now ? { nextActionAt: scheduledAt } : {}),
+    },
+  });
   revalidatePath(`/salons/${salonId}`);
   revalidatePath("/salons");
   revalidatePath("/dashboard");
+  if (notice) redirect(`/salons/${salonId}?activityNotice=${encodeURIComponent(notice)}`);
 }
 
 export async function addReminder(salonId: string, fd: FormData) {

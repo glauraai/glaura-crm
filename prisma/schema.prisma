@@ -456,11 +456,17 @@ model Activity {
   transcriptId        String?
   notes               String?      @db.Text
   outcome             String?
+  scheduledAt         DateTime?
+  durationMin         Int?
+  calendarEventId     String?
+  calendarEventUrl    String?
+  meetUrl             String?
   createdAt           DateTime     @default(now())
 
   @@index([salonId, createdAt])
   @@index([opportunityId, createdAt])
   @@index([userId, createdAt])
+  @@index([userId, scheduledAt])
 }
 
 model Reminder {
