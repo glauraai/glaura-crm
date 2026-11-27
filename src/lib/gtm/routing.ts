@@ -6,6 +6,8 @@ import {
   scoreAccountGtm1Bis,
   type GtmPriority,
 } from "./scoring";
+import { parseLeadNotes } from "./notes-parser";
+import { computeCompositeRankScore } from "./pipeline";
 
 export const C_TIER_NURTURE_SEQUENCE = [
   {
@@ -95,12 +97,13 @@ export function buildGtmRoutingPlan(input: {
 /**
  * Monthly / on-demand GTM 1 bis rescore + SocialSnapshot recorder for Salons and Prospects.
  */
-export async function runGtmRescoreAndSnapshots(now = new Date(), limit = 400) {
+export async function runGtmRescoreAndSnapshots(now = new Date(), limit = 5000) {
   const monthKey = monthKeyForDate(now);
 
   const [salons, prospects] = await Promise.all([
     prisma.salon.findMany({
       where: { archivedAt: null },
+      orderBy: [{ assignedToId: { sort: "asc", nulls: "last" } }, { updatedAt: "desc" }],
       take: limit,
       include: {
         prospect: {
@@ -110,6 +113,14 @@ export async function runGtmRescoreAndSnapshots(now = new Date(), limit = 400) {
             instagramFollowers: true,
             igStatus: true,
             aiOwnership: true,
+            activeSites: true,
+            revenueEur: true,
+            revenueYear: true,
+            revenueStatus: true,
+            legalEntity: true,
+            siren: true,
+            filingUrl: true,
+            notes: true,
             reviewCount: true,
             postalCode: true,
             zone: true,
@@ -120,6 +131,7 @@ export async function runGtmRescoreAndSnapshots(now = new Date(), limit = 400) {
     }),
     prisma.prospect.findMany({
       where: { status: { in: ["NOUVEAU", "EN_TOURNEE"] } },
+      orderBy: [{ assignedToId: { sort: "asc", nulls: "last" } }, { updatedAt: "desc" }],
       take: limit,
       include: { socialSnapshots: { orderBy: { monthKey: "asc" }, take: 6 } },
     }),
@@ -151,22 +163,38 @@ export async function runGtmRescoreAndSnapshots(now = new Date(), limit = 400) {
     }
 
     const growth = computeThreeMonthAudienceGrowth(s.socialSnapshots);
+    const parsedNotes = parseLeadNotes(`${s.notes ?? ""}\n${s.prospect?.notes ?? ""}`);
+    const existingBd = (s.gtmScoreBreakdown ?? {}) as Record<string, unknown>;
+    const videosPerWeek = typeof existingBd.videosPerWeek === "number" ? existingBd.videosPerWeek : null;
+    const staffCount =
+      parsedNotes.staffCount ?? (typeof existingBd.staffCount === "number" ? existingBd.staffCount : null);
     const result = scoreAccountGtm1Bis({
       alreadyClient: s.status === "SIGNE" || Boolean(s.providerId && s.activatedAt),
-      isChainOrFranchise: s.prospect?.aiOwnership === "chain_or_franchise",
-      instagramHandle: s.instagram,
+      isChainOrFranchise:
+        s.prospect?.aiOwnership === "chain_or_franchise" || (s.prospect?.activeSites ?? 0) >= 5,
+      instagramHandle: existingBd.sharedIgHandle ? null : s.instagram,
       igStatus: s.prospect?.igStatus ?? (s.instagram ? "CONFIRME" : "A_FAIRE"),
-      hasPlanity: s.bookingTool === "PLANITY" || Boolean(s.prospect?.planityUrl),
-      hasTreatwell: s.bookingTool === "TREATWELL" || Boolean(s.prospect?.treatwellUrl),
-      hasOtherBookingTool: ["BOOKSY", "FRESHA", "ACUITY"].includes(s.bookingTool),
-      instagramFollowers: followers,
+      hasPlanity: s.bookingTool === "PLANITY" || Boolean(s.prospect?.planityUrl) || parsedNotes.hasPlanityHint,
+      hasTreatwell: s.bookingTool === "TREATWELL" || Boolean(s.prospect?.treatwellUrl) || parsedNotes.hasTreatwellHint,
+      hasOtherBookingTool: ["BOOKSY", "FRESHA", "ACUITY"].includes(s.bookingTool) || parsedNotes.hasOtherToolHint,
+      videosPerWeek,
+      postsVideos: videosPerWeek != null ? videosPerWeek > 0 : Boolean(parsedNotes.tiktokHandle),
+      instagramFollowers: existingBd.sharedIgHandle ? null : followers,
+      staffCount,
       threeMonthGrowthPct: growth.growthPct,
-      googleRating: s.rating,
-      googleReviewCount: s.prospect?.reviewCount ?? null,
+      googleRating: s.rating ?? parsedNotes.ratingHint,
+      googleReviewCount: s.prospect?.reviewCount ?? parsedNotes.reviewCountHint ?? null,
+      sellsProducts: parsedNotes.sellsProductsHint,
       postalCode: s.prospect?.postalCode ?? null,
       zone: s.prospect?.zone ?? null,
       address: s.address,
       isInboundLead: Boolean(s.priorityLabel?.includes("Lead entrant")),
+    });
+
+    const compositeScore = computeCompositeRankScore({
+      gtmScore: result.score,
+      revenueEur: s.prospect?.revenueEur,
+      revenueStatus: s.prospect?.revenueStatus,
     });
 
     await prisma.salon.update({
@@ -176,9 +204,17 @@ export async function runGtmRescoreAndSnapshots(now = new Date(), limit = 400) {
         gtmPriority: result.priority,
         gtmAngle: result.angle,
         gtmScoreBreakdown: {
+          ...existingBd,
           igUnverified: result.igUnverified,
           filterReason: result.filterReason,
           growthPct: growth.growthPct,
+          revenueEur: s.prospect?.revenueEur ?? existingBd.revenueEur ?? null,
+          revenueYear: s.prospect?.revenueYear ?? existingBd.revenueYear ?? null,
+          revenueStatus: s.prospect?.revenueStatus ?? existingBd.revenueStatus ?? null,
+          legalEntity: s.prospect?.legalEntity ?? existingBd.legalEntity ?? null,
+          siren: s.prospect?.siren ?? existingBd.siren ?? null,
+          filingUrl: s.prospect?.filingUrl ?? existingBd.filingUrl ?? null,
+          compositeScore,
           criteria: result.breakdown,
         } as unknown as import("@/generated/prisma/client").Prisma.InputJsonValue,
         gtmScoredAt: now,

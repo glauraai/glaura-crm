@@ -113,7 +113,16 @@ export default async function SalonDetailPage({
   } | null;
   const gtmBreakdown = (salon.gtmScoreBreakdown ?? null) as {
     igUnverified?: boolean;
+    sharedIgHandle?: boolean;
     filterReason?: string | null;
+    revenueEur?: number | null;
+    netResultEur?: number | null;
+    revenueYear?: number | null;
+    revenueStatus?: string | null;
+    legalEntity?: string | null;
+    siren?: string | null;
+    filingUrl?: string | null;
+    compositeScore?: number | null;
     criteria?: Array<{ key: string; label: string; points: number; maxPoints: number; detail: string }>;
   } | null;
 
@@ -342,8 +351,28 @@ export default async function SalonDetailPage({
                 )}
               </div>
               {salon.gtmAngle && <p className="text-xs font-medium text-violet-700">Angle conseillé : {salon.gtmAngle}</p>}
+              {gtmBreakdown?.sharedIgHandle && <p className="mt-1 text-xs text-amber-700">Handle Instagram partagé par plusieurs salons (exclu du score audience).</p>}
               {gtmBreakdown?.igUnverified && <p className="mt-1 text-xs text-amber-700">Instagram non vérifié (non exclu).</p>}
               {gtmBreakdown?.filterReason && <p className="mt-1 text-xs text-slate-600">{gtmBreakdown.filterReason}</p>}
+              {(gtmBreakdown?.revenueEur != null || gtmBreakdown?.legalEntity || gtmBreakdown?.siren) && (
+                <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/70 p-2 text-xs text-emerald-950 space-y-0.5">
+                  {gtmBreakdown.legalEntity && <p className="font-semibold">{gtmBreakdown.legalEntity}{gtmBreakdown.siren ? ` · SIREN ${gtmBreakdown.siren}` : ""}</p>}
+                  {gtmBreakdown.revenueEur != null ? (
+                    <p>
+                      CA : <strong>{Math.round(gtmBreakdown.revenueEur / 1000).toLocaleString("fr-FR")} k€</strong>
+                      {gtmBreakdown.revenueYear ? ` (${gtmBreakdown.revenueYear})` : ""}
+                      {gtmBreakdown.netResultEur != null ? ` · Résultat net : ${Math.round(gtmBreakdown.netResultEur / 1000).toLocaleString("fr-FR")} k€` : ""}
+                    </p>
+                  ) : gtmBreakdown.revenueStatus === "CONFIDENTIAL" ? (
+                    <p>Comptes déposés confidentiels (BODACC)</p>
+                  ) : null}
+                  {gtmBreakdown.filingUrl && (
+                    <a href={gtmBreakdown.filingUrl} target="_blank" rel="noreferrer" className="font-medium text-sky-700 hover:underline">
+                      Voir la fiche légale / BODACC ↗
+                    </a>
+                  )}
+                </div>
+              )}
               {growth.growthPct != null && (
                 <p className="mt-2 rounded-lg bg-violet-50 p-2 text-xs text-violet-900">
                   Croissance audience 3 mois : <strong>{growth.growthPct > 0 ? `+${growth.growthPct}%` : `${growth.growthPct}%`}</strong>
