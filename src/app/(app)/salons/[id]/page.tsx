@@ -6,6 +6,7 @@ import { isAdmin, isManagerOrAdmin, requireMember } from "@/lib/access";
 import { frenchDate } from "@/lib/crm-format";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ActivityLogForm } from "@/components/ActivityLogForm";
+import { ArchiveSalonButton } from "@/components/ArchiveSalonButton";
 import { EmailFollowUpForm } from "@/components/EmailFollowUpForm";
 import { parisDay } from "@/lib/availability";
 import { OnboardingPasswordReveal } from "@/components/OnboardingPasswordReveal";
@@ -165,8 +166,15 @@ export default async function SalonDetailPage({
           <Link href={`/salons/${id}/edit`} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
             Modifier
           </Link>
+          <ArchiveSalonButton salonId={id} salonName={salon.name} archived={Boolean(salon.archivedAt)} />
         </div>
       </div>
+
+      {salon.archivedAt && (
+        <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Ce salon est archivé ({frenchDate(salon.archivedAt)}) et masqué du pipeline et du suivi commercial.
+        </p>
+      )}
 
       <div className="mb-5 flex items-start gap-3">
         {salon.type && (
