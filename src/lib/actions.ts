@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { requireAdmin } from "@/lib/access";
+import { isManagerOrAdmin, requireManager } from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { isDailyPriorityActive, startOfDay } from "@/lib/dailyPriority";
 import { geocodeAddress } from "@/lib/geocode";
@@ -33,10 +33,10 @@ async function requireCurrentUser() {
 
 async function assertCanAccessSalon(salonId: string) {
   const user = await requireCurrentUser();
-  if (user.role === "ADMIN") return user;
+  if (isManagerOrAdmin(user)) return user;
 
   const salon = await prisma.salon.findUnique({ where: { id: salonId }, select: { assignedToId: true } });
-  if (!salon || salon.assignedToId !== user.id) throw new Error("Réservé au commercial assigné ou à un admin");
+  if (!salon || salon.assignedToId !== user.id) throw new Error("Réservé au commercial assigné, au manager ou à un admin");
   return user;
 }
 
@@ -174,8 +174,8 @@ export async function createSalon(fd: FormData) {
 export async function updateSalon(id: string, fd: FormData) {
   const me = await assertCanAccessSalon(id);
   const d = await parse(fd);
-  // Reassignment is admin-only — enforced here, never trust the (hidden-for-reps) form field.
-  const assignedToId = me.role === "ADMIN" ? optionalString(fd.get("assignedToId")) : undefined;
+  // Reassignment is manager/admin-only — enforced here, never trust the (hidden-for-reps) form field.
+  const assignedToId = isManagerOrAdmin(me) ? optionalString(fd.get("assignedToId")) : undefined;
   // "Priorité du jour" checkbox: present → keep/pin for today, absent → clear.
   const priorityDate = fd.has("priorityToday") ? startOfDay() : null;
   if (assignedToId && !await prisma.user.findFirst({ where: { id: assignedToId, active: true } })) throw new Error("Le responsable doit être un membre actif.");
@@ -433,7 +433,7 @@ export type UploadEmailImageResult = { ok: true; url: string } | { ok: false; er
  * author needs to read. Open to any signed-in user, like editing a template.
  */
 export async function uploadEmailImage(fd: FormData): Promise<UploadEmailImageResult> {
-  await requireAdmin();
+  await requireManager();
 
   const file = fd.get("file");
   if (!file || typeof file === "string") return { ok: false, error: "Aucun fichier" };
@@ -447,7 +447,7 @@ export async function uploadEmailImage(fd: FormData): Promise<UploadEmailImageRe
 }
 
 export async function createEmailTemplate(fd: FormData) {
-  const user = await requireAdmin();
+  const user = await requireManager();
   const payload = parseTemplateForm(fd);
 
   // New templates land at the end of the dropdown rather than silently ahead of
@@ -470,7 +470,7 @@ export async function createEmailTemplate(fd: FormData) {
 }
 
 export async function updateEmailTemplate(id: string, fd: FormData) {
-  await requireAdmin();
+  await requireManager();
   const payload = parseTemplateForm(fd);
 
   // `key` is deliberately not updated — EmailJob rows snapshot it.
@@ -484,7 +484,7 @@ export async function updateEmailTemplate(id: string, fd: FormData) {
 
 /** Soft delete: drops the template from the dropdown, keeps past jobs joinable. */
 export async function archiveEmailTemplate(id: string) {
-  await requireAdmin();
+  await requireManager();
 
   const remaining = await prisma.emailTemplate.count({ where: { archivedAt: null } });
   if (remaining <= 1) throw new Error("Impossible d'archiver le dernier modèle — il en faut au moins un.");
@@ -494,7 +494,7 @@ export async function archiveEmailTemplate(id: string) {
 }
 
 export async function restoreEmailTemplate(id: string) {
-  await requireAdmin();
+  await requireManager();
   await prisma.emailTemplate.update({ where: { id }, data: { archivedAt: null } });
   revalidatePath("/modeles");
 }
@@ -614,7 +614,7 @@ export async function revealOnboardingPassword(jobId: string): Promise<RevealPas
     select: { id: true, loginPassword: true, salon: { select: { assignedToId: true } } },
   });
   if (!job) return { ok: false, error: "Job d'onboarding introuvable" };
-  if (user.role !== "ADMIN" && job.salon.assignedToId !== user.id) return { ok: false, error: "Accès réservé au commercial responsable du salon." };
+  if (!isManagerOrAdmin(user) && job.salon.assignedToId !== user.id) return { ok: false, error: "Accès réservé au commercial responsable du salon." };
   if (!job.loginPassword) return { ok: false, error: "Aucun mot de passe enregistré pour ce job" };
 
   let password: string;

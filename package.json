@@ -28,6 +28,8 @@
     "prospect:jobs": "tsx scripts/process-prospect-jobs.ts",
     "prospect:worker": "tsx scripts/process-prospect-jobs.ts --loop",
     "prospect:import-scores": "tsx scripts/import-prospect-scores.ts",
+    "agents:jobs": "tsx scripts/process-agent-jobs.ts",
+    "agents:worker": "tsx scripts/process-agent-jobs.ts --loop",
     "dev:setup": "tsx scripts/setup-local.ts",
     "instagram:sync": "tsx scripts/sync-instagram-inbox.ts"
   },

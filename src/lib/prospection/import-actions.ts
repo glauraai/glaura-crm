@@ -5,6 +5,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireMember } from "@/lib/access";
+import { isManagerOrAdmin } from "@/lib/roles";
 import { canonicalizePhone } from "@/lib/phone";
 import { matchCrmSalon, normalizeName } from "@/lib/prospection/match";
 import { loadCrmIndex } from "@/lib/prospection/upsert";
@@ -49,7 +50,7 @@ const INACTIVE_OWNER = "Choisissez un membre actif de l’équipe.";
 
 /** undefined when the admin picked someone who can't own prospects. */
 async function resolveOwner(user: { id: string; role?: string }, ownerId: string | null): Promise<string | null | undefined> {
-  if (user.role !== "ADMIN" || ownerId === "me") return user.id;
+  if (!isManagerOrAdmin(user) || ownerId === "me") return user.id;
   if (!ownerId) return null; // admin importing into the shared pool
   const member = await prisma.user.findFirst({ where: { id: ownerId, active: true }, select: { id: true } });
   return member?.id;
@@ -72,7 +73,7 @@ export async function importLeadBatch(input: { leads: unknown[]; ownerId: string
     if (assignedToId === undefined) return { ok: false, error: INACTIVE_OWNER };
     if (!leads.length) return { ok: true, created: 0, skipped: input?.leads?.length ?? 0, alreadyInCrm: 0, unmatchedOwners: [], salons: 0 };
 
-    const members: OwnerCandidate[] = user.role === "ADMIN" && leads.some(l => l.owner)
+    const members: OwnerCandidate[] = isManagerOrAdmin(user) && leads.some(l => l.owner)
       ? await prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, email: true } })
       : [];
     const unmatchedOwners = new Set<string>();
@@ -92,7 +93,7 @@ export async function importLeadBatch(input: { leads: unknown[]; ownerId: string
       if (matchedSalonId) alreadyInCrm++;
       const { owner, ...fields } = lead;
       const rowOwner = matchOwner(owner, members);
-      if (owner && !rowOwner && user.role === "ADMIN") unmatchedOwners.add(owner);
+      if (owner && !rowOwner && isManagerOrAdmin(user)) unmatchedOwners.add(owner);
       return {
         ...fields,
         notes: owner && !rowOwner ? [fields.notes, `Commercial : ${owner}`].filter(Boolean).join("\n") : fields.notes,

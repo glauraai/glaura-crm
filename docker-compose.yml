@@ -74,3 +74,8 @@ services:
     <<: *crm-service
     container_name: glaura-crm-prospection-worker
     command: ["npm", "run", "prospect:worker"]
+
+  agents-worker:
+    <<: *crm-service
+    container_name: glaura-crm-agents-worker
+    command: ["npm", "run", "agents:worker"]

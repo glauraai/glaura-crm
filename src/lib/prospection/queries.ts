@@ -142,10 +142,12 @@ export const PROSPECT_STATUS_LABEL: Record<string, string> = {
 
 export async function getProspectPool(user: { id: string; role?: string }, filters: Record<string, string | undefined>) {
   const { prospectScope } = await import("@/lib/access");
+  const { isManagerOrAdmin } = await import("@/lib/roles");
+  const canFilterOwner = isManagerOrAdmin(user);
   const validStatuses = Object.keys(PROSPECT_STATUS_LABEL);
   const page = Math.max(1, Math.min(100000, Number.parseInt(filters.page ?? "", 10) || 1));
   const where: import("@/generated/prisma/client").Prisma.ProspectWhereInput = {
-    AND: [prospectScope(user), ...(filters.owner && filters.owner !== "none" && user.role === "ADMIN" ? [{ OR: [{ assignedToId: filters.owner }, { assignedToId: null, tournee: { assignedToId: filters.owner } }] }] : [])],
+    AND: [prospectScope(user), ...(filters.owner && filters.owner !== "none" && canFilterOwner ? [{ OR: [{ assignedToId: filters.owner }, { assignedToId: null, tournee: { assignedToId: filters.owner } }] }] : [])],
     ...(filters.status && validStatuses.includes(filters.status) ? { status: filters.status as import("@/generated/prisma/enums").ProspectStatus } : {}),
     ...(filters.zone ? { zone: filters.zone } : {}),
     ...(filters.platform === "both" ? { treatwellUrl: { not: null }, planityUrl: { not: null }, dualPlatformCheckedAt: { not: null } } : {}),
@@ -153,7 +155,7 @@ export async function getProspectPool(user: { id: string; role?: string }, filte
     ...(filters.platform === "planity" ? { planityUrl: { not: null } } : {}),
     ...(filters.ig === "pending" ? { igStatus: "A_VALIDER" } : {}),
     ...(filters.ig === "missing" ? { instagram: null } : {}),
-    ...(filters.owner === "none" && user.role === "ADMIN" ? { assignedToId: null, tourneeId: null } : {}),
+    ...(filters.owner === "none" && canFilterOwner ? { assignedToId: null, tourneeId: null } : {}),
     ...(filters.specialty === "beauty_nails" ? { aiSpecialty: { in: [...BEAUTY_NAILS_SPECIALTIES] } } : filters.specialty && filters.specialty in AI_SPECIALTY_LABEL ? { aiSpecialty: filters.specialty } : {}),
     ...(filters.ownership && filters.ownership in AI_OWNERSHIP_LABEL ? { aiOwnership: filters.ownership } : {}),
     ...(filters.company === "VERIFIED" ? { companyMatchStatus: "VERIFIED" } : filters.company === "PUBLISHED" ? { revenueStatus: "PUBLISHED" } : {}),

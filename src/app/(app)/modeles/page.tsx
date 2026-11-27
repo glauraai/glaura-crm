@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/access";
+import { requireManager } from "@/lib/access";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
@@ -20,7 +20,7 @@ export default async function EmailTemplatesPage({
 }: {
   searchParams: Promise<{ edit?: string; new?: string }>;
 }) {
-  await requireAdmin();
+  await requireManager();
   const session = await auth();
   if (!session?.user?.id) notFound();
 

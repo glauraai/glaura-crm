@@ -2,7 +2,7 @@ import { LEAD_TEMPERATURE_LABEL } from "@/lib/labels";
 import Link from "next/link";
 import { LeadProvenance } from "@/components/LeadProvenance";
 import { notFound } from "next/navigation";
-import { requireMember } from "@/lib/access";
+import { isAdmin, isManagerOrAdmin, requireMember } from "@/lib/access";
 import { frenchDate } from "@/lib/crm-format";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EmailFollowUpForm } from "@/components/EmailFollowUpForm";
@@ -29,6 +29,12 @@ import {
 import { cn, timeAgo } from "@/lib/utils";
 import { repSender } from "@/lib/email";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
+import { SalonInstagramPanel } from "@/components/SalonInstagramPanel";
+import { PricingCalculator } from "@/components/PricingCalculator";
+import { addContact, createOpportunity, moveOpportunityStage } from "@/lib/pipeline/actions";
+import { OPPORTUNITY_STAGES, STAGE_META_MAP } from "@/lib/pipeline/stages";
+import { formatEurCents } from "@/lib/pricing/catalog";
+import { canAccessSalonInstagram } from "@/lib/access";
 
 const ACT_TYPES = ["APPEL", "VISIO", "VISITE", "RELANCE", "EMAIL", "DEMO", "NOTE"] as const;
 const card = "rounded-xl border border-slate-300 bg-white p-5 shadow-sm";
@@ -63,14 +69,21 @@ const emailStatusStyle = {
   FAILED: "bg-rose-50 text-rose-800 ring-rose-200",
 } as const;
 
-export default async function SalonDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function SalonDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const session = { user: await requireMember() };
   const me = session?.user;
-  const isAdmin = me?.role === "ADMIN";
+  const canManage = isManagerOrAdmin(me);
+  const isAdminOnly = isAdmin(me);
   const [salon, assignableUsers, emailTemplates, myAccount] = await Promise.all([
     getSalon(id, me ? { id: me.id, role: me.role } : undefined),
-    isAdmin ? getAssignableUsers() : Promise.resolve([]),
+    canManage ? getAssignableUsers() : Promise.resolve([]),
     // Archived templates stay out of the dropdown but remain joinable from the
     // jobs they already produced.
     prisma.emailTemplate.findMany({
@@ -174,7 +187,7 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* Left: info + status + onboarding */}
         <div className="space-y-5">
-          <SalonEditModal action={updateSalon.bind(null, id)} salon={editSalon} isAdmin={isAdmin} assignableUsers={assignableUsers} priorityActive={priorityActive}>
+          <SalonEditModal action={updateSalon.bind(null, id)} salon={editSalon} isAdmin={canManage} assignableUsers={assignableUsers} priorityActive={priorityActive}>
             <div className={cn(card, "cursor-pointer transition hover:border-rose-300 hover:shadow-md")}>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-slate-900">Informations</h2>
@@ -289,7 +302,7 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
                   </a>
                 )}
                 {latestJob.error && <p className="mt-2 text-sm text-rose-700">{latestJob.error}</p>}
-                {latestJob.status === "REVIEW_REQUIRED" && isAdmin && (
+                {latestJob.status === "REVIEW_REQUIRED" && isAdminOnly && (
                   <form action={approveProIdentityAndRetry.bind(null, latestJob.id)} className="mt-3">
                     <button className="w-full rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-600">
                       Valider l&apos;identité et relancer
@@ -377,6 +390,7 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
               }}
               templates={emailTemplates}
               onboardingValues={onboardingValues}
+              isAdmin={canManage}
             />
             {salon.emailJobs.length > 0 && (
               <ul className="mt-4 space-y-2">
@@ -425,6 +439,124 @@ export default async function SalonDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
       </div>
+
+      {/* V1 / V1.5 Extensions: Pipeline Opportunities, Contacts, Rep IG DMs, Pending AI Suggestions & Pricing/Payment Links */}
+      <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* Opportunities (13-stage deals + upsells) */}
+        <div className={card}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">Opportunités & Pipeline ({salon.opportunities.length})</h2>
+            <Link href="/pipeline" className="text-xs font-medium text-rose-700 hover:underline">Voir tout le pipeline →</Link>
+          </div>
+          <div className="space-y-3">
+            {salon.opportunities.map((opp) => {
+              const meta = STAGE_META_MAP[opp.stage];
+              return (
+                <div key={opp.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-900">{opp.title}</span>
+                    <span className={cn("rounded-full px-2 py-0.5 font-semibold", meta.badgeClass)}>{meta.label}</span>
+                  </div>
+                  <p className="mt-1 text-slate-600">
+                    {opp.monthlyAmountEur ? `${opp.monthlyAmountEur} € HT/mois` : "MRR non défini"} · {opp.owner?.name ?? opp.owner?.email ?? "Non attribué"}
+                    {opp.ownerLockedAt ? ` · Figé le ${frenchDate(opp.ownerLockedAt)}` : ""}
+                  </p>
+                  <form action={moveOpportunityStage} className="mt-2 flex flex-wrap gap-1.5">
+                    <input type="hidden" name="opportunityId" value={opp.id} />
+                    <input type="hidden" name="returnTo" value={`/salons/${salon.id}`} />
+                    <select name="stage" defaultValue={opp.stage} className="h-8 rounded border border-slate-300 bg-white px-2 text-xs">
+                      {OPPORTUNITY_STAGES.map((s) => <option key={s.stage} value={s.stage}>{s.label}</option>)}
+                    </select>
+                    <input name="lossReason" placeholder="Motif si Perdu…" className="h-8 flex-1 rounded border border-slate-300 bg-white px-2 text-xs" />
+                    <button className="rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white">OK</button>
+                  </form>
+                </div>
+              );
+            })}
+            <form action={createOpportunity} className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+              <input type="hidden" name="salonId" value={salon.id} />
+              <input name="title" placeholder="Nouvelle opportunité (ex. Upsell Laura IA)…" required className="h-9 flex-1 rounded-lg border border-slate-300 px-2.5 text-xs" />
+              <input name="monthlyAmountEur" type="number" step="0.01" placeholder="MRR €" className="h-9 w-24 rounded-lg border border-slate-300 px-2.5 text-xs" />
+              <button className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">+ Deal</button>
+            </form>
+          </div>
+        </div>
+
+        {/* Contacts (with decision-maker flag for Allo/ECHO matching) */}
+        <div className={card}>
+          <h2 className="mb-3 text-sm font-semibold text-slate-900">Contacts & Décideurs ({salon.contacts.length})</h2>
+          <ul className="mb-3 space-y-2 text-xs">
+            {salon.contacts.map((c) => (
+              <li key={c.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <div>
+                  <p className="font-semibold text-slate-900">
+                    {c.name} {c.role ? `· ${c.role}` : ""}
+                  </p>
+                  <p className="text-slate-500">{[c.phone, c.email].filter(Boolean).join(" · ") || "—"}</p>
+                </div>
+                {c.isDecisionMaker && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">Décideur</span>
+                )}
+              </li>
+            ))}
+            {salon.contacts.length === 0 && <li className="text-slate-400">Aucun contact enregistré.</li>}
+          </ul>
+          <form action={addContact} className="grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2">
+            <input type="hidden" name="salonId" value={salon.id} />
+            <input name="name" required placeholder="Nom & prénom" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
+            <input name="role" placeholder="Rôle (Gérante, Manager…)" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
+            <input name="phone" placeholder="Téléphone (Allo)" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
+            <input name="email" type="email" placeholder="Email" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
+            <label className="flex items-center gap-1.5 text-xs text-slate-700">
+              <input type="checkbox" name="isDecisionMaker" /> Décideur / Gérant(e)
+            </label>
+            <button className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white">Ajouter contact</button>
+          </form>
+        </div>
+
+        {/* Rep-scoped Instagram DM Panel */}
+        {me && canAccessSalonInstagram(me, salon) && (
+          <SalonInstagramPanel salonId={salon.id} conversations={salon.instagramConversations} error={sp.igError} />
+        )}
+
+        {/* Pricing & Stripe Payment Link Builder */}
+        <div className={card}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">Tarifs & Lien de paiement Stripe</h2>
+            <Link href="/tarifs" className="text-xs font-medium text-rose-700 hover:underline">Grille complète →</Link>
+          </div>
+          {sp.offerNotice && <p className="mb-3 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800">{sp.offerNotice}</p>}
+          <PricingCalculator
+            fixedSalon={{ id: salon.id, name: salon.name, providerId: salon.providerId ?? latestJob?.accountUid ?? null }}
+            returnTo={`/salons/${salon.id}`}
+          />
+          {salon.subscriptions.length > 0 && (
+            <ul className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-xs">
+              {salon.subscriptions.map((sub) => (
+                <li key={sub.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                  <span>
+                    <strong>{sub.label}</strong> · {formatEurCents(sub.listMonthlyCents)}/m ({sub.cadence})
+                  </span>
+                  {sub.checkoutUrl ? <CopyLinkButton url={sub.checkoutUrl} label="Copier lien Stripe" /> : <span className="text-slate-400">Brouillon</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {salon.suggestions.length > 0 && (
+        <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-violet-950">
+              {salon.suggestions.length} suggestion(s) IA en attente de validation pour ce salon
+            </p>
+            <Link href="/suggestions" className="text-xs font-semibold text-violet-800 hover:underline">
+              Valider dans Suggestions IA →
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

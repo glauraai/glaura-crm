@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireMember, requireAdmin, prospectScope } from "@/lib/access";
+import { requireMember, requireManager, prospectScope } from "@/lib/access";
 import { parisDateInput, parisDeadline } from "@/lib/crm-format";
 import { ZONE_BY_SLUG } from "@/lib/prospection/zones";
 import { tierForProspect } from "@/lib/prospection/tier";
@@ -28,7 +28,7 @@ async function activeAssignee(id: string) {
 }
 
 export async function generateTournee(fd: FormData) {
-  await requireAdmin();
+  await requireManager();
   return withErrorBanner(async () => {
     const d = z.object({ zone: z.string().min(1), assignedToId: z.string().min(1), size: z.coerce.number().int().min(1).max(100), minTier: z.coerce.number().int().min(1).max(4) }).parse(Object.fromEntries(fd));
     if (!ZONE_BY_SLUG.has(d.zone)) throw new Error("Zone inconnue.");
@@ -52,7 +52,7 @@ export async function generateTournee(fd: FormData) {
 }
 
 export async function assignProspects(fd: FormData) {
-  await requireAdmin();
+  await requireManager();
   return withErrorBanner(async () => {
     const ids = z.array(z.string().min(1)).min(1).max(100).parse(fd.getAll("prospectId"));
     const requestKey = z.uuid().parse(fd.get("requestKey"));
@@ -72,7 +72,7 @@ export async function assignProspects(fd: FormData) {
 }
 
 export async function releaseProspect(fd: FormData) {
-  await requireAdmin();
+  await requireManager();
   return withErrorBanner(async () => {
     const id = z.string().min(1).parse(fd.get("prospectId"));
     await prisma.$transaction(async tx => {

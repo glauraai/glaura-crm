@@ -16,6 +16,7 @@ datasource db {
 
 enum Role {
   COMMERCIAL
+  MANAGER
   ADMIN
 }
 
@@ -124,6 +125,85 @@ enum EmailJobStatus {
   FAILED
 }
 
+// ── V1 / V1.5 Sales CRM, Agents & Commissions Enums ──────────────
+
+enum OpportunityStage {
+  A_CONTACTER
+  CONTACTE
+  R1_PROGRAMME
+  R1_EFFECTUE
+  NO_SHOW
+  A_RELANCER
+  ANNULE
+  DEVIS_ENVOYE
+  ABONNE
+  COMPTE_ACTIVE
+  SIGNE
+  ENCAISSE
+  PERDU
+}
+
+enum AgentName {
+  ECHO
+  SCOUT
+  CRAFT
+  SENTINEL
+  MENTOR
+  GTM
+}
+
+enum SuggestionKind {
+  QUALIFICATION_UPDATE
+  STAGE_CHANGE
+  TASK_CREATE
+  QUOTE_DRAFT
+  EMAIL_DRAFT
+  RELANCE
+  PREP_BRIEF
+  PLAYBOOK_UPDATE
+}
+
+enum SuggestionStatus {
+  PENDING
+  APPROVED
+  MODIFIED
+  REJECTED
+}
+
+enum TranscriptSource {
+  ALLO
+  WISPR_FLOW
+  UPLOAD
+}
+
+enum TranscriptMatchStatus {
+  MATCHED
+  UNMATCHED
+  IGNORED
+}
+
+enum BillingCadence {
+  MONTHLY
+  ANNUAL_3X
+  ANNUAL_1X
+}
+
+enum CommissionStatus {
+  PREVUE
+  EN_VALIDATION
+  ACQUISE
+  VERSEE
+  PERDUE
+  ARRETEE
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED_UPHELD
+  RESOLVED_ADJUSTED
+  REJECTED
+}
+
 // NOTE: the `EmailTemplate` enum that used to live here became a model (below) —
 // templates are editable data now, not a deploy-gated code constant.
 
@@ -151,6 +231,17 @@ model User {
   emailJobs         EmailJob[]
   emailTemplates    EmailTemplate[]
   tournees          Tournee[]
+
+  ownedOpportunities      Opportunity[]        @relation("OpportunityOwner")
+  stageTransitions        StageTransition[]    @relation("StageTransitionActor")
+  assignedSuggestions     AgentSuggestion[]    @relation("SuggestionAssignee")
+  reviewedSuggestions     AgentSuggestion[]    @relation("SuggestionReviewer")
+  transcripts             TranscriptRecord[]   @relation("TranscriptOwner")
+  commissions             Commission[]         @relation("CommissionOwner")
+  raisedDisputes          CommissionDispute[]  @relation("DisputeRaiser")
+  resolvedDisputes        CommissionDispute[]  @relation("DisputeResolver")
+  salesGoals              SalesGoal[]
+  sentInstagramMessages   InstagramMessage[]   @relation("InstagramSender")
 }
 
 model Salon {
@@ -200,6 +291,11 @@ model Salon {
   clientBaseImported  Boolean   @default(false)
   importedClientCount Int?
 
+  providerId           String?   @unique // linked Firebase prod-eu userProfile UID
+  siret                String?
+  portfolioClaimedAt   DateTime?
+  portfolioClaimedById String?
+
   // Duplicate handling. Salons are never deleted: a duplicate is archived and
   // points at the record it was merged into, so the merge can be undone and the
   // original data stays auditable. Archived salons are hidden from the pipeline.
@@ -219,6 +315,12 @@ model Salon {
   onboardingJobs OnboardingJob[]
   emailJobs      EmailJob[]
   prospect       Prospect?       @relation("ProspectConversion")
+  contacts       Contact[]
+  opportunities  Opportunity[]
+  suggestions    AgentSuggestion[]
+  transcripts    TranscriptRecord[]
+  subscriptions  SubscriptionLine[]
+  syncedInvoices SyncedInvoice[]
 
   @@index([status])
   @@index([metier])
@@ -301,6 +403,7 @@ model Prospect {
 
   assignedToId String?
   assignedTo   User?       @relation("ProspectOwner", fields: [assignedToId], references: [id], onDelete: SetNull)
+  claimedAt    DateTime? // timestamp of rep portfolio self-claim (enforces 120/mo cap)
   tasks        SalesTask[]
 
   tourneeId String?
@@ -337,17 +440,27 @@ model Tournee {
 }
 
 model Activity {
-  id        String       @id @default(cuid())
-  salonId   String
-  salon     Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  userId    String?
-  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  type      ActivityType
-  notes     String?      @db.Text
-  outcome   String?
-  createdAt DateTime     @default(now())
+  id                  String       @id @default(cuid())
+  salonId             String
+  salon               Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  userId              String?
+  user                User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  opportunityId       String?
+  opportunity         Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  contactId           String?
+  contact             Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  type                ActivityType
+  source              String? // MANUAL | ALLO | WISPR_FLOW
+  durationSec         Int?
+  isDecisionMakerCall Boolean?
+  transcriptId        String?
+  notes               String?      @db.Text
+  outcome             String?
+  createdAt           DateTime     @default(now())
 
   @@index([salonId, createdAt])
+  @@index([opportunityId, createdAt])
+  @@index([userId, createdAt])
 }
 
 model Reminder {
@@ -594,6 +707,8 @@ model InstagramMessage {
   incoming       Boolean
   text           String                @db.Text
   sentAt         DateTime
+  sentByUserId   String?
+  sentByUser     User?                 @relation("InstagramSender", fields: [sentByUserId], references: [id], onDelete: SetNull)
 
   @@index([conversationId, sentAt])
 }
@@ -657,4 +772,291 @@ model InstagramSync {
   heartbeatAt DateTime?
   finishedAt DateTime?
   error String?
+}
+
+// ── V1 / V1.5 Models: Pipeline, Agents, Transcripts, Pricing & Commissions ──
+
+model Contact {
+  id              String   @id @default(cuid())
+  salonId         String
+  salon           Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name            String
+  role            String?
+  isDecisionMaker Boolean  @default(false)
+  phone           String?
+  phoneNormalized String? // E.164 or canonical FR digits for Allo matching
+  email           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  activities  Activity[]
+  transcripts TranscriptRecord[]
+
+  @@index([salonId])
+  @@index([phoneNormalized])
+  @@index([email])
+}
+
+model Opportunity {
+  id                String           @id @default(cuid())
+  salonId           String
+  salon             Salon            @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  title             String           @default("Abonnement Glaura")
+  stage             OpportunityStage @default(A_CONTACTER)
+  monthlyAmountEur  Float?
+  nextStep          String?
+  nextStepAt        DateTime?
+  lossReason        String?
+  atRisk            Boolean          @default(false)
+  riskReason        String?
+  ownerId           String?
+  owner             User?            @relation("OpportunityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerLockedAt     DateTime? // locked when stage reaches SIGNE
+  signedAt          DateTime?
+  qualificationJson Json?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  transitions   StageTransition[]
+  ownershipLogs OwnershipAuditLog[]
+  activities    Activity[]
+  suggestions   AgentSuggestion[]
+  transcripts   TranscriptRecord[]
+  subscriptions SubscriptionLine[]
+  commission    Commission?
+
+  @@index([salonId])
+  @@index([ownerId, stage])
+  @@index([stage, updatedAt])
+}
+
+model StageTransition {
+  id            String            @id @default(cuid())
+  opportunityId String
+  opportunity   Opportunity       @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  fromStage     OpportunityStage?
+  toStage       OpportunityStage
+  changedById   String?
+  changedBy     User?             @relation("StageTransitionActor", fields: [changedById], references: [id], onDelete: SetNull)
+  source        String            @default("MANUAL") // MANUAL | AGENT_VALIDATED | SYSTEM
+  createdAt     DateTime          @default(now())
+
+  @@index([opportunityId, createdAt])
+}
+
+model OwnershipAuditLog {
+  id            String      @id @default(cuid())
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  fromUserId    String?
+  toUserId      String?
+  changedById   String
+  reason        String
+  createdAt     DateTime    @default(now())
+
+  @@index([opportunityId, createdAt])
+}
+
+// Human-in-the-loop approval queue: every agent proposes here, never mutates directly.
+model AgentSuggestion {
+  id               String           @id @default(cuid())
+  agent            AgentName
+  kind             SuggestionKind
+  targetType       String // SALON | OPPORTUNITY | TASK | QUOTE | PLAYBOOK
+  targetId         String?
+  salonId          String?
+  salon            Salon?           @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  opportunityId    String?
+  opportunity      Opportunity?     @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  assignedToId     String?
+  assignedTo       User?            @relation("SuggestionAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  status           SuggestionStatus @default(PENDING)
+  title            String
+  proposedPayload  Json
+  appliedPayload   Json? // rep-edited payload when MODIFIED (enables Fodé diff view)
+  generationReport Json // { actionsTaken[], assumptions[], toVerify[], sources[] }
+  reviewedById     String?
+  reviewedBy       User?            @relation("SuggestionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt       DateTime?
+  createdAt        DateTime         @default(now())
+
+  @@index([status, assignedToId, createdAt])
+  @@index([salonId, status])
+  @@index([agent, status])
+}
+
+// Call & meeting transcripts (Allo webhook, Wispr Flow, manual upload). Raw text auto-purged after 12 months.
+model TranscriptRecord {
+  id                  String                @id @default(cuid())
+  source              TranscriptSource
+  externalId          String                @unique
+  salonId             String?
+  salon               Salon?                @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  opportunityId       String?
+  opportunity         Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  contactId           String?
+  contact             Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  userId              String?
+  user                User?                 @relation("TranscriptOwner", fields: [userId], references: [id], onDelete: SetNull)
+  callerPhone         String?
+  participantEmails   String[]              @default([])
+  callDirection       String? // INBOUND | OUTBOUND
+  callResult          String? // ANSWERED | MISSED | VOICEMAIL
+  recordingUrl        String?
+  durationSec         Int?
+  occurredAt          DateTime              @default(now())
+  rawTranscript       String?               @db.Text
+  summary             String?               @db.Text
+  isDecisionMakerCall Boolean?
+  matchStatus         TranscriptMatchStatus @default(UNMATCHED)
+  echoProcessedAt     DateTime?
+  purgedAt            DateTime?
+  createdAt           DateTime              @default(now())
+
+  @@index([matchStatus, createdAt])
+  @@index([salonId, occurredAt])
+  @@index([echoProcessedAt, matchStatus])
+}
+
+// Line-item subscription / quote configuration & Stripe checkout payment link.
+model SubscriptionLine {
+  id               String         @id @default(cuid())
+  opportunityId    String?
+  opportunity      Opportunity?   @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  salonId          String
+  salon            Salon          @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  planCode         String // essentiel_v3 | salon_solo | salon_v3 | tout_en_un_v3 | etc.
+  label            String
+  cadence          BillingCadence @default(MONTHLY)
+  listMonthlyCents Int
+  discountPercent  Float          @default(0)
+  netMonthlyCents  Int
+  freeMonths       Int            @default(0)
+  lauraChannels    String? // instagram | whatsapp | both | phone | full
+  lauraCents       Int            @default(0)
+  syncIncluded     Boolean        @default(false)
+  syncCents        Int            @default(0)
+  checkoutUrl      String?
+  status           String         @default("DRAFT") // DRAFT | SENT | ACCEPTED | PAID
+  createdById      String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([salonId, createdAt])
+  @@index([opportunityId])
+}
+
+// Quarterly immutable commission plan rules (never retroactive).
+model CommissionPlanVersion {
+  id                                String   @id @default(cuid())
+  quarterKey                        String   @unique // e.g. "2026-Q4"
+  baseRate                          Float    @default(0.7716) // 1250 / 1620
+  m1TargetEur                       Float    @default(810)
+  standardTargetEur                 Float    @default(1620)
+  accel2Threshold                   Float    @default(1.0)
+  accel2Multiplier                  Float    @default(2.0)
+  accel3Threshold                   Float    @default(1.5)
+  accel3Multiplier                  Float    @default(3.0)
+  guaranteeEur                      Float    @default(1250)
+  guaranteeMinDmCalls               Int      @default(120)
+  guaranteeMinMeetings              Int      @default(40)
+  minDecisionMakerCallSec           Int      @default(90)
+  excludeCancelledBeforeTwoInvoices Boolean  @default(true)
+  effectiveFrom                     DateTime
+  effectiveTo                       DateTime
+  createdAt                         DateTime @default(now())
+
+  commissions Commission[]
+}
+
+// Read-only mirror of Stripe invoices fetched via rk_live key + Firestore prod-eu providerId.
+model SyncedInvoice {
+  id                   String    @id @default(cuid())
+  stripeInvoiceId      String    @unique
+  providerId           String
+  salonId              String?
+  salon                Salon?    @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  stripeCustomerId     String
+  stripeSubscriptionId String?
+  amountPaidCents      Int
+  status               String // paid | open | void | uncollectible
+  paidAt               DateTime?
+  refunded             Boolean   @default(false)
+  disputed             Boolean   @default(false)
+  billingReason        String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([providerId, paidAt])
+  @@index([salonId, paidAt])
+}
+
+model Commission {
+  id                String                @id @default(cuid())
+  opportunityId     String                @unique
+  opportunity       Opportunity           @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  ownerId           String
+  owner             User                  @relation("CommissionOwner", fields: [ownerId], references: [id])
+  planVersionId     String
+  planVersion       CommissionPlanVersion @relation(fields: [planVersionId], references: [id])
+  signedMonth       String // YYYY-MM
+  cadence           BillingCadence        @default(MONTHLY)
+  mrrSignedEur      Float
+  discountPercent   Float                 @default(0)
+  effectiveRate     Float
+  baseAmountEur     Float
+  finalAmountEur    Float
+  status            CommissionStatus      @default(PREVUE)
+  paidInvoicesCount Int                   @default(0)
+  acquiredAt        DateTime?
+  settledAt         DateTime?
+  paidOutAt         DateTime?
+  lossReason        String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  disputes CommissionDispute[]
+
+  @@index([ownerId, signedMonth])
+  @@index([status, signedMonth])
+}
+
+model CommissionDispute {
+  id             String        @id @default(cuid())
+  commissionId   String
+  commission     Commission    @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+  raisedById     String
+  raisedBy       User          @relation("DisputeRaiser", fields: [raisedById], references: [id])
+  reason         String        @db.Text
+  status         DisputeStatus @default(OPEN)
+  resolutionNote String?       @db.Text
+  resolvedById   String?
+  resolvedBy     User?         @relation("DisputeResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([commissionId])
+  @@index([status, createdAt])
+}
+
+model SalesGoal {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  periodKey      String // YYYY-MM
+  targetMrrEur   Float    @default(1620)
+  targetMeetings Int      @default(40)
+  targetDmCalls  Int      @default(120)
+  isRampMonth    Boolean  @default(false) // M1 / M2 guarantee eligibility
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, periodKey])
+}
+
+// Singleton ("default") tracking inbound "Être appelé" round-robin rotation.
+model RoundRobinState {
+  id             String   @id @default("default")
+  lastAssignedId String?
+  updatedAt      DateTime @updatedAt
 }

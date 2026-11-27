@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireMember, prospectScope } from "@/lib/access";
+import { isManagerOrAdmin } from "@/lib/roles";
 import { parisDeadline } from "@/lib/crm-format";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -11,7 +12,7 @@ export async function createSalesTask(fd: FormData) {
   let error: string | null = null;
   try {
     const d = z.object({ requestKey: z.uuid(), title: z.string().trim().min(1).max(200), context: z.string().trim().max(4000).optional(), dueAt: z.string(), assignedToId: z.string().min(1), prospectId: z.string().optional(), salonId: z.string().optional() }).parse(Object.fromEntries(fd));
-    const assignedToId = user.role === "ADMIN" ? d.assignedToId : user.id;
+    const assignedToId = isManagerOrAdmin(user) ? d.assignedToId : user.id;
     if (!await prisma.user.findFirst({ where: { id: assignedToId, active: true } })) throw new Error("Le responsable doit être un membre actif.");
     if (d.prospectId) {
       const lead = await prisma.prospect.findFirst({ where: { id: d.prospectId, ...prospectScope(user), status: { in: ["NOUVEAU", "EN_TOURNEE", "CONVERTI"] } }, include: { tournee: true } });
@@ -29,7 +30,7 @@ export async function createSalesTask(fd: FormData) {
 export async function finishSalesTask(fd: FormData) {
   const user = await requireMember();
   const d = z.object({ id: z.string().min(1), outcome: z.string().trim().min(1).max(4000) }).parse(Object.fromEntries(fd));
-  const changed = await prisma.salesTask.updateMany({ where: { id: d.id, doneAt: null, ...(user.role === "ADMIN" ? {} : { assignedToId: user.id }) }, data: { doneAt: new Date(), outcome: d.outcome } });
+  const changed = await prisma.salesTask.updateMany({ where: { id: d.id, doneAt: null, ...(isManagerOrAdmin(user) ? {} : { assignedToId: user.id }) }, data: { doneAt: new Date(), outcome: d.outcome } });
   if (!changed.count) throw new Error("Tâche inaccessible ou déjà terminée.");
   revalidatePath("/taches"); revalidatePath("/dashboard"); revalidatePath("/prospection");
 }

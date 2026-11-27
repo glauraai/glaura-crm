@@ -1,13 +1,13 @@
 "use server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/access";
+import { requireManager } from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { ZONE_BY_SLUG } from "@/lib/prospection/zones";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 export async function queueProspectRun(fd: FormData) {
-  const user = await requireAdmin();
+  const user = await requireManager();
   let error: string | null = null;
   try {
     const d = z.object({ kind: z.enum(["DIRECTORIES", "GOOGLE", "INSTAGRAM", "GOOGLE_DISCOVERY", "INSTAGRAM_DISCOVERY", "TREATWELL_PLANITY"]), zone: z.string(), query: z.string().trim().max(2000).optional(), limit: z.coerce.number().int().min(1).max(200) }).parse(Object.fromEntries(fd));
