@@ -221,9 +221,25 @@ export async function archiveSalon(salonId: string) {
   await assertCanAccessSalon(salonId);
   await prisma.salon.update({
     where: { id: salonId },
-    data: { archivedAt: new Date(), archiveNote: "Archivé depuis la liste des salons", priorityDate: null },
+    data: { archivedAt: new Date(), archiveNote: "Archivé depuis le CRM", priorityDate: null },
   });
+  revalidatePath(`/salons/${salonId}`);
   revalidatePath("/salons");
+  revalidatePath("/pipeline");
+  revalidatePath("/pilotage");
+  revalidatePath("/dashboard");
+}
+
+export async function restoreSalon(salonId: string) {
+  await assertCanAccessSalon(salonId);
+  await prisma.salon.update({
+    where: { id: salonId },
+    data: { archivedAt: null, archiveNote: null },
+  });
+  revalidatePath(`/salons/${salonId}`);
+  revalidatePath("/salons");
+  revalidatePath("/pipeline");
+  revalidatePath("/pilotage");
   revalidatePath("/dashboard");
 }
 

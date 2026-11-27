@@ -191,7 +191,7 @@ export default async function PipelinePage({
                       <p className="text-xs text-slate-500">{opp.title}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", meta.badgeClass)}>{meta.label}</span>
+                      <span className={cn("inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", meta.badgeClass)}>{meta.label}</span>
                       {opp.ownerLockedAt && <p className="mt-1 text-[11px] text-emerald-700">Figé le {frenchDate(opp.ownerLockedAt)}</p>}
                     </td>
                     <td className="px-4 py-3 font-medium">{opp.monthlyAmountEur ? `${opp.monthlyAmountEur} €` : "—"}</td>
