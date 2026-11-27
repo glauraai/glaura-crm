@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ACTIVITY_LABEL } from "@/lib/labels";
 import { SubmitButton } from "@/components/SubmitButton";
+import { FrenchDatePicker } from "@/components/FrenchDatePicker";
 import {
   findSlotConflicts,
   parseParisDateTimeInput,
@@ -133,26 +134,32 @@ export function ActivityLogForm({
       </select>
 
       <div className="grid grid-cols-2 gap-2">
-        <label className="text-[11px] font-medium text-slate-500">
-          Date
-          <input
-            type="date"
+        <div className="text-[11px] font-medium text-slate-500">
+          <span className="block">Date</span>
+          <FrenchDatePicker
             name="scheduledDate"
             value={scheduledDate}
-            onChange={(e) => {
-              setScheduledDate(e.target.value);
+            today={defaultDate}
+            onChange={(next) => {
+              setScheduledDate(next);
               setForceConflict(false);
             }}
-            required={isCalendarMeeting && syncCalendar}
-            className={`${field} mt-0.5 h-9 px-2 text-xs`}
+            className={`${field} mt-0.5 h-9 px-2.5 text-xs`}
           />
-        </label>
+        </div>
         <label className="text-[11px] font-medium text-slate-500">
           Heure {isCalendarMeeting && syncCalendar ? "*" : "(optionnel)"}
           <input
             type="time"
             name="scheduledTime"
             value={scheduledTime}
+            onClick={(e) => {
+              try {
+                e.currentTarget.showPicker?.();
+              } catch {
+                // Unsupported in some webviews
+              }
+            }}
             onChange={(e) => {
               setScheduledTime(e.target.value);
               setForceConflict(false);
