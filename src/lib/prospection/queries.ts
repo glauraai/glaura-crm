@@ -159,14 +159,15 @@ export async function getProspectPool(user: { id: string; role?: string }, filte
     ...(filters.specialty === "beauty_nails" ? { aiSpecialty: { in: [...BEAUTY_NAILS_SPECIALTIES] } } : filters.specialty && filters.specialty in AI_SPECIALTY_LABEL ? { aiSpecialty: filters.specialty } : {}),
     ...(filters.ownership && filters.ownership in AI_OWNERSHIP_LABEL ? { aiOwnership: filters.ownership } : {}),
     ...(filters.company === "VERIFIED" ? { companyMatchStatus: "VERIFIED" } : filters.company === "PUBLISHED" ? { revenueStatus: "PUBLISHED" } : {}),
+    ...(filters.gtm && ["A", "B", "C", "CHAINE", "HORS_CIBLE"].includes(filters.gtm) ? { gtmPriority: filters.gtm } : {}),
     ...(filters.q?.trim() ? { OR: ["name", "city", "address", "instagram", "legalEntity", "siren", "phone", "email", "contactName"].map(key => ({ [key]: { contains: filters.q!.trim().slice(0, 200), mode: "insensitive" } })) } : {}),
   };
   const orderBy: import("@/generated/prisma/client").Prisma.ProspectOrderByWithRelationInput[] =
     filters.sort === "ai_score"
-      ? [{ aiScore: { sort: "desc", nulls: "last" } }, { reviewCount: "desc" }, { id: "asc" }]
+      ? [{ aiScore: { sort: "desc", nulls: "last" } }, { gtmScore: { sort: "desc", nulls: "last" } }, { reviewCount: "desc" }, { id: "asc" }]
       : filters.sort === "revenue"
-        ? [{ revenueEur: { sort: "desc", nulls: "last" } }, { aiScore: { sort: "desc", nulls: "last" } }, { id: "asc" }]
-        : [{ tier: "desc" }, { aiScore: { sort: "desc", nulls: "last" } }, { updatedAt: "desc" }, { id: "asc" }];
+        ? [{ revenueEur: { sort: "desc", nulls: "last" } }, { gtmScore: { sort: "desc", nulls: "last" } }, { id: "asc" }]
+        : [{ gtmScore: { sort: "desc", nulls: "last" } }, { aiScore: { sort: "desc", nulls: "last" } }, { tier: "desc" }, { updatedAt: "desc" }, { id: "asc" }];
   const [total, available, assigned, rows] = await Promise.all([
     prisma.prospect.count({ where }),
     prisma.prospect.count({ where: { ...prospectScope(user), status: "NOUVEAU" } }),

@@ -13,11 +13,13 @@ export type SalonFilters = {
   status?: string;
   metier?: string;
   type?: string;
+  gtm?: string; // A | B | C | CHAINE | HORS_CIBLE
   owner?: string;
   arr?: string;
   source?: string; // "SCRAPE" → salons converted from prospecting
   prio?: string; // "today" → active daily priorities, including carried-over pins
   scope?: string; // "all" → cross-rep read-only browse (Nov 27 brief pp. 7 & 12)
+  sort?: string; // "rank" (default) | "recent"
   q?: string;
   page?: string;
 };
@@ -63,6 +65,7 @@ async function salonWhere(f: SalonFilters, viewer: ViewerScope): Promise<import(
       ...(f.status && Object.values(SalonStatus).includes(f.status as SalonStatus) ? { status: f.status as SalonStatus } : {}),
       ...(f.metier && Object.values(Metier).includes(f.metier as Metier) ? { metier: { has: f.metier as Metier } } : {}),
       ...(f.type && Object.values(SalonType).includes(f.type as SalonType) ? { type: f.type as SalonType } : {}),
+      ...(f.gtm && ["A", "B", "C", "CHAINE", "HORS_CIBLE"].includes(f.gtm) ? { gtmPriority: f.gtm } : {}),
       ...(ownerId ? { assignedToId: ownerId } : {}),
       ...(f.arr ? { arrondissement: f.arr } : {}),
       ...(f.source && Object.values(LeadSource).includes(f.source as LeadSource) ? { source: f.source as LeadSource } : {}),
@@ -86,9 +89,28 @@ async function salonWhere(f: SalonFilters, viewer: ViewerScope): Promise<import(
 export async function getSalons(f: SalonFilters, viewer: ViewerScope) {
   const where = await salonWhere(f, viewer);
   const page = Math.max(1, Math.min(100000, Number.parseInt(f.page ?? "", 10) || 1));
+  const orderBy: import("@/generated/prisma/client").Prisma.SalonOrderByWithRelationInput[] =
+    f.sort === "recent"
+      ? [{ updatedAt: "desc" }, { id: "asc" }]
+      : [{ gtmScore: { sort: "desc", nulls: "last" } }, { updatedAt: "desc" }, { id: "asc" }];
   return prisma.salon.findMany({ where, skip: (page - 1) * 50, take: 50,
-    orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-    include: { prospect: { select: { source: true, sourceUrl: true } }, assignedTo: { select: { id: true, name: true, email: true } }, tasks: { where: { doneAt: null }, orderBy: { dueAt: "asc" }, take: 1, select: { title: true, dueAt: true } } },
+    orderBy,
+    include: {
+      prospect: {
+        select: {
+          source: true,
+          sourceUrl: true,
+          instagramFollowers: true,
+          revenueEur: true,
+          revenueYear: true,
+          revenueStatus: true,
+          filingUrl: true,
+          aiScore: true,
+        },
+      },
+      assignedTo: { select: { id: true, name: true, email: true } },
+      tasks: { where: { doneAt: null }, orderBy: { dueAt: "asc" }, take: 1, select: { title: true, dueAt: true } },
+    },
   });
 }
 export async function getSalonCount(f: SalonFilters, viewer: ViewerScope) {
