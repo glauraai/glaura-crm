@@ -2,6 +2,12 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { parseAlloDurationSeconds, parseAlloWebhook, verifyAlloSignature } from "./allo";
 import { computeSuggestionDiff, parseEchoOutput } from "./echo";
+import {
+  DEFAULT_AI_MONTHLY_BUDGET_EUR,
+  estimateAnthropicCostEur,
+  extractUsageCostEur,
+  isMonthlyAiBudgetExceeded,
+} from "./budget";
 
 describe("Allo (withallo.com) webhook & ECHO agent", () => {
   it("verifies Allo HMAC-SHA256 webhook signatures and rejects tampered payloads", () => {
@@ -85,5 +91,23 @@ describe("Allo (withallo.com) webhook & ECHO agent", () => {
       { proposedStage: "R1_EFFECTUE", nextStep: "Démo vendredi" },
     );
     expect(diff).toEqual([{ field: "proposedStage", before: "R1_PROGRAMME", after: "R1_EFFECTUE" }]);
+  });
+
+  it("enforces the 10 EUR per user per month Haiku AI budget cap", () => {
+    expect(DEFAULT_AI_MONTHLY_BUDGET_EUR).toBe(10);
+    const callCost = estimateAnthropicCostEur("claude-haiku-5-5", {
+      inputTokens: 2000,
+      outputTokens: 400,
+      cacheReadTokens: 1000,
+    });
+    expect(callCost).toBeGreaterThan(0);
+    expect(callCost).toBeLessThan(0.01);
+
+    expect(extractUsageCostEur({ usage: { costEur: 0.0042 } })).toBe(0.0042);
+    expect(extractUsageCostEur({})).toBe(0);
+
+    expect(isMonthlyAiBudgetExceeded({ spentEur: 9.5, runsThisMonth: 500 }).exceeded).toBe(false);
+    expect(isMonthlyAiBudgetExceeded({ spentEur: 10.0, runsThisMonth: 500 }).exceeded).toBe(true);
+    expect(isMonthlyAiBudgetExceeded({ spentEur: 0.05, runsThisMonth: 10, maxRuns: 10 }).exceeded).toBe(true);
   });
 });

@@ -6,9 +6,15 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireMember } from "@/lib/access";
-import { mapStageToSalonStatus, OPPORTUNITY_STAGE_ORDER } from "@/lib/pipeline/stages";
+import { mapStageToSalonStatus, OPPORTUNITY_STAGE_ORDER, startOfCurrentParisMonth } from "@/lib/pipeline/stages";
 import { fetchAlloTranscript } from "./allo";
 import { runEchoExtraction, twelveMonthsAgo } from "./echo";
+import {
+  configuredMonthlyBudgetEur,
+  configuredMonthlyRunLimit,
+  extractUsageCostEur,
+  isMonthlyAiBudgetExceeded,
+} from "./budget";
 
 /**
  * Processes a matched TranscriptRecord through ECHO (Claude Sonnet 4.6)
@@ -44,15 +50,34 @@ export async function processTranscriptWithEcho(transcriptId: string) {
       select: { id: true, stage: true, ownerId: true },
     }));
 
-  const echo = await runEchoExtraction({
+  const assigneeId = opp?.ownerId ?? record.salon.assignedToId ?? record.userId;
+
+  // Enforce per-user monthly AI budget (default 10 EUR/user/month, Haiku 5.5)
+  if (assigneeId) {
+    const monthStart = startOfCurrentParisMonth();
+    const monthlySuggestions = await prisma.agentSuggestion.findMany({
+      where: { assignedToId: assigneeId, createdAt: { gte: monthStart } },
+      select: { generationReport: true },
+    });
+    const spentEur = monthlySuggestions.reduce((sum, s) => sum + extractUsageCostEur(s.generationReport), 0);
+    const budgetCheck = isMonthlyAiBudgetExceeded({
+      spentEur,
+      runsThisMonth: monthlySuggestions.length,
+      budgetEur: configuredMonthlyBudgetEur(),
+      maxRuns: configuredMonthlyRunLimit(),
+    });
+    if (budgetCheck.exceeded) {
+      return { skipped: true, budgetExceeded: true, reason: budgetCheck.reason };
+    }
+  }
+
+  const { output: echo, usage } = await runEchoExtraction({
     salonName: record.salon.name,
     currentStage: opp?.stage ?? "A_CONTACTER",
     sourceLabel: `${record.source} (${record.externalId})`,
     durationSec: record.durationSec,
     transcriptText: text,
   });
-
-  const assigneeId = opp?.ownerId ?? record.salon.assignedToId ?? record.userId;
 
   await prisma.$transaction(async (tx) => {
     await tx.transcriptRecord.update({
@@ -87,7 +112,7 @@ export async function processTranscriptWithEcho(transcriptId: string) {
           nextStepDate: echo.nextStepDate ?? null,
           durationSec: record.durationSec,
         } as unknown as import("@/generated/prisma/client").Prisma.InputJsonValue,
-        generationReport: echo.generationReport as unknown as import("@/generated/prisma/client").Prisma.InputJsonValue,
+        generationReport: { ...echo.generationReport, usage } as unknown as import("@/generated/prisma/client").Prisma.InputJsonValue,
       },
     });
   });

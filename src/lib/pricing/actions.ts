@@ -6,7 +6,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireMember } from "@/lib/access";
 import type { BillingCadence } from "@/generated/prisma/enums";
-import { calculateOfferPricing, requestStripeOfferLink } from "./catalog";
+import { calculateOfferPricing } from "./catalog";
+import { requestStripeOfferLink } from "./offer-link";
 
 export async function createSubscriptionOffer(fd: FormData) {
   const user = await requireMember();

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { OPPORTUNITY_STAGE_ORDER } from "@/lib/pipeline/stages";
+import { estimateAnthropicCostEur } from "./budget";
 
 const stageEnum = z.enum(OPPORTUNITY_STAGE_ORDER as [string, ...string[]]);
 
@@ -75,18 +76,30 @@ Règles strictes :
 - Inclus toujours un generationReport honnête (actionsTaken, assumptions, toVerify, sources).
 - Réponds UNIQUEMENT en JSON valide correspondant au schéma demandé.`;
 
+export type EchoRunResult = {
+  output: EchoOutput;
+  usage: {
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    costEur: number;
+  };
+};
+
 export async function runEchoExtraction(input: {
   salonName: string;
   currentStage: string;
   sourceLabel: string;
   durationSec: number | null;
   transcriptText: string;
-}): Promise<EchoOutput> {
+}): Promise<EchoRunResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY manquante pour ECHO.");
   }
-  const model = process.env.CRM_SALES_AGENT_MODEL?.trim() || "claude-sonnet-4-6";
+  const model = process.env.CRM_SALES_AGENT_MODEL?.trim() || "claude-haiku-5-5";
   const client = new Anthropic({ apiKey });
 
   const userPrompt = JSON.stringify({
@@ -99,8 +112,8 @@ export async function runEchoExtraction(input: {
 
   const msg = await client.messages.create({
     model,
-    max_tokens: 1400,
-    system: ECHO_SYSTEM_PROMPT,
+    max_tokens: 1200,
+    system: [{ type: "text", text: ECHO_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: userPrompt }],
   });
 
@@ -114,7 +127,22 @@ export async function runEchoExtraction(input: {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "");
 
-  return parseEchoOutput(JSON.parse(cleaned));
+  const rawUsage = msg.usage as unknown as Record<string, number | undefined>;
+  const inputTokens = rawUsage.input_tokens ?? 0;
+  const outputTokens = rawUsage.output_tokens ?? 0;
+  const cacheReadTokens = rawUsage.cache_read_input_tokens ?? 0;
+  const cacheWriteTokens = rawUsage.cache_creation_input_tokens ?? 0;
+  const costEur = estimateAnthropicCostEur(model, {
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+  });
+
+  return {
+    output: parseEchoOutput(JSON.parse(cleaned)),
+    usage: { model, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, costEur },
+  };
 }
 
 export function twelveMonthsAgo(now = new Date()): Date {
