@@ -25,10 +25,16 @@ export function configuredSalesAgentModel(): string {
 }
 
 export function stripJsonCodeFences(raw: string): string {
-  return raw
+  const trimmed = raw
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "");
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+  return trimmed;
 }
 
 export async function checkUserAiBudget(userId: string | null | undefined): Promise<{
@@ -67,7 +73,8 @@ export async function runCachedHaikuText(input: {
   const client = new Anthropic({ apiKey });
   const msg = await client.messages.create({
     model,
-    max_tokens: input.maxTokens ?? 1200,
+    // claude-haiku-5-5 allocates adaptive thinking tokens out of max_tokens; keep >= 1600 to prevent truncated JSON.
+    max_tokens: Math.max(input.maxTokens ?? 1600, 1600),
     system: [{ type: "text", text: input.systemPrompt, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: input.userContent }],
   });

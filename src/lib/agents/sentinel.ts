@@ -165,6 +165,8 @@ export async function runSentinelSweep(now = new Date()) {
   let flagged = 0;
   let cleared = 0;
   let suggestionsCreated = 0;
+  let llmCallsUsed = 0;
+  const MAX_LLM_CALLS_PER_SWEEP = 20;
 
   for (const opp of opportunities) {
     const paidInvoicesCount = opp.salon.syncedInvoices.filter(
@@ -226,9 +228,10 @@ export async function runSentinelSweep(now = new Date()) {
     let toVerify: string[] = ["Vérifier s’il y a eu un échange hors CRM avant de relancer."];
     let usage: unknown = undefined;
 
-    if (process.env.ANTHROPIC_API_KEY?.trim()) {
+    if (process.env.ANTHROPIC_API_KEY?.trim() && llmCallsUsed < MAX_LLM_CALLS_PER_SWEEP) {
       const budget = await checkUserAiBudget(assigneeId);
       if (budget.allowed) {
+        llmCallsUsed++;
         try {
           const llm = await runCachedHaikuJson({
             systemPrompt: SENTINEL_SYSTEM_PROMPT,
@@ -239,7 +242,7 @@ export async function runSentinelSweep(now = new Date()) {
               monthlyAmountEur: opp.monthlyAmountEur,
             },
             parse: (raw) => sentinelRelanceSchema.parse(raw),
-            maxTokens: 450,
+            maxTokens: 1600,
           });
           followUpMessage = llm.output.followUpMessage;
           channel = llm.output.channel;
