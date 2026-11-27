@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSalonCalendarEventPayload,
+  findSlotConflicts,
   matchEventToSalon,
   mergeCalendarAndCrmMeetings,
   parseParisDateTimeInput,
+  suggestFreeTimes,
+  toDaySlot,
   type CalendarEvent,
   type MatchableSalon,
 } from "./calendar-sync";
@@ -225,5 +228,38 @@ describe("calendar-sync helpers", () => {
     expect(mergedTeam[2].isPrivate).toBe(true);
     expect(mergedTeam[2].title).toBe("Occupé (privé)");
     expect(mergedTeam[2].description).toBeNull();
+  });
+
+  it("detects slot conflicts accurately, ignores all-day banners, and suggests free slots", () => {
+    const day = "2026-12-01";
+    const s1 = toDaySlot(
+      {
+        id: "ev-1",
+        start: parseParisDateTimeInput(day, "12:00")!,
+        end: parseParisDateTimeInput(day, "13:00")!,
+        title: "Visite — EMMA BEAUTY",
+      },
+      day,
+    )!;
+    const allDay = toDaySlot(
+      {
+        id: "ev-all",
+        start: parseParisDateTimeInput(day, "08:00")!,
+        end: parseParisDateTimeInput(day, "20:00")!,
+        title: "Salon professionnel",
+        allDay: true,
+      },
+      day,
+    )!;
+
+    // Exact overlap -> conflict
+    expect(findSlotConflicts(parseParisDateTimeInput(day, "12:30")!, 45, [s1, allDay])).toHaveLength(1);
+    // Touching boundary (13:00 after 12:00–13:00) -> no conflict
+    expect(findSlotConflicts(parseParisDateTimeInput(day, "13:00")!, 45, [s1, allDay])).toHaveLength(0);
+    // Free times should exclude 12:00 and include 09:00, 10:00, 11:00, 14:00...
+    const free = suggestFreeTimes(day, 60, [s1, allDay], 6);
+    expect(free).not.toContain("12:00");
+    expect(free).toContain("10:00");
+    expect(free).toContain("14:00");
   });
 });
