@@ -5,7 +5,9 @@ import { notFound } from "next/navigation";
 import { isAdmin, isManagerOrAdmin, requireMember } from "@/lib/access";
 import { frenchDate } from "@/lib/crm-format";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { ActivityLogForm } from "@/components/ActivityLogForm";
 import { EmailFollowUpForm } from "@/components/EmailFollowUpForm";
+import { parisDay } from "@/lib/availability";
 import { OnboardingPasswordReveal } from "@/components/OnboardingPasswordReveal";
 import { SalonEditModal } from "@/components/SalonEditModal";
 import { getSalon, getAssignableUsers } from "@/lib/salons";
@@ -36,10 +38,8 @@ import { OPPORTUNITY_STAGES, STAGE_META_MAP } from "@/lib/pipeline/stages";
 import { formatEurCents } from "@/lib/pricing/catalog";
 import { canAccessSalonInstagram } from "@/lib/access";
 
-const ACT_TYPES = ["APPEL", "VISIO", "VISITE", "RELANCE", "EMAIL", "DEMO", "NOTE"] as const;
 const card = "rounded-xl border border-slate-300 bg-white p-5 shadow-sm";
 const field = "h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100";
-const textareaField = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-950 shadow-sm outline-none placeholder:text-slate-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100";
 const onboardingStatusLabel = {
   QUEUED: "En attente",
   PROCESSING: "En cours",
@@ -338,15 +338,16 @@ export default async function SalonDetailPage({
         <div className="space-y-5 lg:col-span-1">
           <div className={card}>
             <h2 className="mb-3 text-sm font-semibold text-slate-900">Nouvelle activité</h2>
-            <form action={logActivity.bind(null, id)} className="space-y-2">
-              <select name="type" className={field} defaultValue="APPEL">
-                {ACT_TYPES.map((t) => (
-                  <option key={t} value={t}>{ACTIVITY_LABEL[t]}</option>
-                ))}
-              </select>
-              <textarea name="notes" rows={2} className={textareaField} placeholder="Notes…" />
-              <button className="w-full rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Enregistrer</button>
-            </form>
+            {sp.activityNotice && (
+              <p className="mb-2.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-2 text-xs text-indigo-900">
+                {sp.activityNotice}
+              </p>
+            )}
+            <ActivityLogForm
+              action={logActivity.bind(null, id)}
+              salon={{ name: salon.name, address: salon.address, contactEmail: salon.contactEmail }}
+              defaultDate={parisDay(new Date())}
+            />
           </div>
 
           <div className={card}>
@@ -361,7 +362,27 @@ export default async function SalonDetailPage({
                       <span className="text-sm font-medium text-slate-700">{ACTIVITY_LABEL[a.type]}</span>
                       <span className="text-xs text-slate-400">{timeAgo(a.createdAt)}</span>
                     </div>
-                    {a.notes && <p className="text-sm text-slate-500">{a.notes}</p>}
+                    {a.scheduledAt && (
+                      <p className="mt-0.5 text-xs font-medium text-indigo-700">
+                        Planifié le {frenchDate(a.scheduledAt, true)}
+                        {a.durationMin ? ` · ${a.durationMin} min` : ""}
+                      </p>
+                    )}
+                    {(a.meetUrl || a.calendarEventUrl) && (
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                        {a.meetUrl && (
+                          <a href={a.meetUrl} target="_blank" rel="noreferrer" className="font-medium text-emerald-700 hover:underline">
+                            Rejoindre Meet →
+                          </a>
+                        )}
+                        {a.calendarEventUrl && (
+                          <a href={a.calendarEventUrl} target="_blank" rel="noreferrer" className="font-medium text-indigo-700 hover:underline">
+                            Google Agenda →
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {a.notes && <p className="mt-0.5 text-sm text-slate-500">{a.notes}</p>}
                     {a.user?.name && <p className="text-xs text-slate-400">{a.user.name}</p>}
                   </li>
                 ))}
