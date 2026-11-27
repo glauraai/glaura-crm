@@ -54,6 +54,12 @@ export function PipelineFilters({
           </Chip>
         ))}
         <span className="mx-1 w-px self-stretch bg-slate-200" />
+        {(["A", "B", "C", "CHAINE"] as const).map((g) => (
+          <Chip key={`gtm-${g}`} active={params.gtm === g} href={toggleHref(params, "gtm", g)}>
+            {g === "CHAINE" ? "Chaînes" : `GTM ${g}`}
+          </Chip>
+        ))}
+        <span className="mx-1 w-px self-stretch bg-slate-200" />
         {TYPES.map((t) => (
           <Chip key={t} active={params.type === t} href={toggleHref(params, "type", t)}>
             Type {t}

@@ -6,6 +6,7 @@ import { runScoutUpcomingSweep } from "@/lib/agents/scout";
 import { evaluateTranscriptWithMentor, runWeeklyPlaybookLearning } from "@/lib/agents/mentor";
 import { runPortfolioInactivitySweep } from "@/lib/agents/inactivity";
 import { runGtmRescoreAndSnapshots } from "@/lib/gtm/routing";
+import { runEnrichmentAndRankingPipeline } from "@/lib/gtm/pipeline";
 
 const LOOP = process.argv.includes("--loop");
 const POLL_MS = 20_000;
@@ -81,6 +82,22 @@ async function runOnce() {
       await ensureMondaySentinelDigest();
     } catch (err) {
       console.error("[agents-worker] SENTINEL error:", err);
+    }
+
+    // Background SIRENE/BODACC + IG Business Discovery enrichment (rate-limited <= 120 IG calls/hr, assigned leads first)
+    try {
+      const enriched = await runEnrichmentAndRankingPipeline({
+        scope: "all",
+        onlyUnenriched: true,
+        limit: 150,
+        igBudget: 120,
+        log: (m) => console.log(m),
+      });
+      if (enriched.salonsProcessed > 0 || enriched.prospectsProcessed > 0) {
+        console.log("[agents-worker] GTM enrichment batch:", enriched);
+      }
+    } catch (err) {
+      console.error("[agents-worker] GTM enrichment error:", err);
     }
   }
 

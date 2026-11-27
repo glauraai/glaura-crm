@@ -41,6 +41,58 @@ export function igGraphConfig(): IgGraphConfig | null {
 }
 
 const FIELDS = "username,name,followers_count,media_count,biography,website";
+const RICH_FIELDS = "username,name,followers_count,media_count,biography,website,media.limit(12){media_type,timestamp,caption}";
+
+export type IgRichProfile = IgProfile & {
+  mediaCount: number | null;
+  recentMedia: Array<{ media_type?: string; timestamp?: string; caption?: string }>;
+};
+
+// Look up one handle with recent media (for GTM 1 bis video cadence & bio friction scoring).
+export async function businessDiscoveryWithMedia(
+  handle: string,
+  config: IgGraphConfig,
+): Promise<IgRichProfile | null> {
+  const fields = `business_discovery.username(${handle}){${RICH_FIELDS}}`;
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${config.userId}?fields=${encodeURIComponent(fields)}&access_token=${config.token}`;
+
+  const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  const body = (await response.json()) as {
+    business_discovery?: {
+      username?: string;
+      name?: string;
+      followers_count?: number;
+      media_count?: number;
+      biography?: string;
+      website?: string;
+      media?: { data?: Array<{ media_type?: string; timestamp?: string; caption?: string }> };
+    };
+    error?: GraphError;
+  };
+
+  if (body.error) {
+    const { code, message } = body.error;
+    if (code != null && AUTH_CODES.has(code)) throw new IgGraphAuthError(`Graph API: ${message} (code ${code})`);
+    if (code != null && RATE_LIMIT_CODES.has(code)) throw new IgGraphRateLimitError(`Graph API rate-limit (code ${code})`);
+    return null;
+  }
+
+  const bd = body.business_discovery;
+  if (!bd?.username) return null;
+
+  return {
+    username: bd.username,
+    fullName: bd.name ?? null,
+    followers: typeof bd.followers_count === "number" ? bd.followers_count : null,
+    mediaCount: typeof bd.media_count === "number" ? bd.media_count : null,
+    biography: bd.biography ?? null,
+    bioLinks: bd.website ? [bd.website] : [],
+    categoryName: null,
+    isPrivate: false,
+    businessAddress: null,
+    recentMedia: Array.isArray(bd.media?.data) ? bd.media.data : [],
+  };
+}
 
 // Look up one handle. Returns null when the account doesn't exist or isn't a
 // Business/Creator account (both are "not found" for our purposes).
