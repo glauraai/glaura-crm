@@ -59,6 +59,7 @@ import { hoursToTiming, type Timing } from "./hours";
 import { rehostSalonImages } from "./images";
 import { maybeSendWelcomeEmail } from "./welcome-email";
 import { maybeSendMagicLinkEmail } from "./magic-link";
+import { isPlaceholderProfile, REPAIRED_ACCOUNT_WARNING, usableSalonName } from "./placeholder";
 import type { OnboardingHints, OnboardingOverrides, OnboardingResult } from "@/lib/onboarding";
 
 const EMAIL_DOMAIN = GLAURA_EMAIL_DOMAIN;
@@ -643,6 +644,76 @@ async function enrichExistingAccount(
 }
 
 /**
+ * Repairs, in place, a headless account that an earlier onboarding created
+ * from an empty page (0 services or an "(unknown)" name). Returns null when
+ * the account is a real one (leave it alone) or this extract has nothing
+ * better to offer. Keeps the uid, login email and password; never enables.
+ */
+async function repairPlaceholderAccount(
+  existing: FirebaseFirestore.QueryDocumentSnapshot,
+  extract: SalonExtract,
+  hints: OnboardingHints | undefined,
+  source: AccountSourceContext,
+  overrides: OnboardingOverrides | undefined,
+): Promise<CreateAccountResult | null> {
+  const name = usableSalonName(extract.salon.name, hints?.salonName);
+  if (!name || extract.services.length === 0) return null;
+  const uid = existing.id;
+  const data = existing.data() as { email?: string; companyName?: unknown; companyUserName?: unknown };
+  const services = await getDb().collection("services").where("ownerId", "==", uid).get();
+  const activeServices = services.docs.filter((doc) => doc.get("isDeleted") !== true).length;
+  if (!isPlaceholderProfile(data, activeServices)) return null;
+
+  const warnings = [REPAIRED_ACCOUNT_WARNING];
+  const salonExtract = { ...extract, salon: { ...extract.salon, name } };
+  const keepSlug = !isPlaceholderProfile({ companyName: "x", companyUserName: data.companyUserName }, 1);
+  const base = slugify(name);
+  const slug = keepSlug ? String(data.companyUserName) : (await reserveSlugAndEmail(base)).slug;
+  const { address, lat, lng } = await resolveLocation(salonExtract, hints, warnings);
+  const { timing, days } = hoursToTiming(extract.salon.hours);
+  const { profileImg, salonImages } = await rehostSalonImages(uid, extract.salon.images, Date.now(), warnings);
+  const profile = buildUserProfile(salonExtract, {
+    uid,
+    email: data.email ?? "",
+    companyUserName: slug,
+    timing,
+    days,
+    searchNameList: buildSearchNameList(name, slug, base),
+    lat,
+    lng,
+    hints: { crmSalonId: hints?.crmSalonId ?? null },
+    crmSourceUrl: source.url,
+    profileImg,
+    salonImages,
+  });
+  const repairKeys = ["name", "companyName", "companyUserName", "phone", "address", "spLocation", "salonBio",
+    "profileImg", "salon_images", "timing", "days", "searchNameList", "crmSourceUrl"] as const;
+  const patch = Object.fromEntries(repairKeys.map((key) => [key, (profile as unknown as Record<string, unknown>)[key]]));
+  await getDb().collection("userProfile").doc(uid).set({ ...patch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+
+  // Services already added by hand (or an earlier repair) are kept as they are.
+  const catalog = activeServices === 0
+    ? await applyCatalogEnrichment(uid, salonExtract, overrides, timing, days, warnings)
+    : { serviceCount: activeServices, agentCount: 0, reviewCount: 0 };
+
+  return {
+    status: "success",
+    ownerId: uid,
+    email: data.email ?? null,
+    password: null,
+    address,
+    lat,
+    lng,
+    ...catalog,
+    welcomeEmailSent: false,
+    sourceType: source.sourceType,
+    url: source.url,
+    warnings,
+    error: null,
+  };
+}
+
+/**
  * Creates a DISABLED Glaura salon account (Auth user + `userProfile` +
  * services) from a validated `SalonExtract`, or returns the existing
  * headless-staging profile if one was already created for this CRM salon.
@@ -687,6 +758,22 @@ export async function createDisabledSalonAccount(
     try {
       const existing = await findExistingHeadlessProfile(hints.crmSalonId);
       if (existing) {
+        // A retry after a dead booking link: fill the empty account in place.
+        const repaired = await repairPlaceholderAccount(existing, extract, hints, source, overrides).catch((error: unknown) =>
+          failure({
+            ownerId: existing.id,
+            email: null,
+            password: null,
+            address: null,
+            lat: null,
+            lng: null,
+            serviceCount: 0,
+            sourceType: source.sourceType,
+            url: source.url,
+            warnings: [],
+            error: `Réparation du compte existant échouée : ${error instanceof Error ? error.message : String(error)}`,
+          }));
+        if (repaired) return repaired;
         const data = existing.data() as { email?: string; address?: string; spLocation?: { latitude?: number; longitude?: number } };
         return {
           status: "already_onboarded",
