@@ -35,6 +35,12 @@ describe("Glaura subscription pricing & payment calculator", () => {
     expect(res.freeWebsiteIncluded).toBe(true);
   });
 
+  it("maps Solo 39 EUR to solo_pro_v3, not legacy premium_v3", () => {
+    const solo = GLAURA_PLANS.find((p) => p.code === "salon_solo");
+    expect(solo?.monthlyHtCents).toBe(3900);
+    expect(solo?.stripeV3Code).toBe("solo_pro_v3");
+  });
+
   it("computes Annual 3x (11 months split in 3 installments, 1 month free)", () => {
     const res = calculateOfferPricing({
       planCode: "salon_v3",

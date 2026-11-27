@@ -24,7 +24,7 @@ export const GLAURA_PLANS: readonly GlauraPlanSpec[] = [
   {
     code: "premium_v3",
     stripeV3Code: "premium_v3",
-    name: "Glaura Premium",
+    name: "Glaura Premium (ancienne offre)",
     monthlyHtCents: 2900,
     targetSegment: "Salon solo (V3)",
     freeWebsiteOnAnnual: true,
@@ -32,7 +32,7 @@ export const GLAURA_PLANS: readonly GlauraPlanSpec[] = [
   },
   {
     code: "salon_solo",
-    stripeV3Code: "premium_v3",
+    stripeV3Code: "solo_pro_v3",
     name: "Salon solo (Grille 24/11)",
     monthlyHtCents: 3900,
     targetSegment: "Salon 1 praticien",
@@ -42,7 +42,7 @@ export const GLAURA_PLANS: readonly GlauraPlanSpec[] = [
   {
     code: "tout_en_un_v3",
     stripeV3Code: "tout_en_un_v3",
-    name: "Glaura Tout-en-un (Laura incluse)",
+    name: "Glaura Tout-en-un (Laura incluse, ancienne offre)",
     monthlyHtCents: 5900,
     targetSegment: "Salon avec Laura IG + WA inclus",
     freeWebsiteOnAnnual: true,
