@@ -42,10 +42,10 @@ export default async function RemunerationPage({
   const monthStart = new Date(`${month}-01T00:00:00.000Z`);
   const monthEnd = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
 
-  const [users, commissions, goal, dmCallsCount, meetingsCount, openDisputes, collectedInvoices] = await Promise.all([
+  const [users, allMonthCommissions, allMonthGoals, dmCallsByUser, meetingsByUser, openDisputes, collectedInvoices, auditLogs] = await Promise.all([
     admin ? getAssignableUsers() : Promise.resolve([]),
     prisma.commission.findMany({
-      where: { signedMonth: month, ...(admin && !sp.rep ? {} : { ownerId: selectedRepId }) },
+      where: { signedMonth: month, ...(admin ? {} : { ownerId: user.id }) },
       include: {
         owner: { select: { id: true, name: true, email: true } },
         planVersion: true,
@@ -54,32 +54,73 @@ export default async function RemunerationPage({
       },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.salesGoal.findUnique({ where: { userId_periodKey: { userId: selectedRepId, periodKey: month } } }),
-    prisma.activity.count({
-      where: { userId: selectedRepId, isDecisionMakerCall: true, createdAt: { gte: monthStart, lt: monthEnd } },
+    prisma.salesGoal.findMany({
+      where: { periodKey: month, ...(admin ? {} : { userId: user.id }) },
     }),
-    prisma.stageTransition.count({
+    prisma.activity.groupBy({
+      by: ["userId"],
+      where: { isDecisionMakerCall: true, createdAt: { gte: monthStart, lt: monthEnd }, ...(admin ? {} : { userId: user.id }) },
+      _count: { _all: true },
+    }),
+    prisma.stageTransition.findMany({
       where: {
         toStage: "R1_PROGRAMME",
         createdAt: { gte: monthStart, lt: monthEnd },
-        opportunity: { ownerId: selectedRepId },
+        ...(admin ? {} : { opportunity: { ownerId: user.id } }),
       },
+      select: { opportunity: { select: { ownerId: true } } },
     }),
     admin
       ? prisma.commissionDispute.findMany({
-          where: { status: "OPEN" },
           include: {
             raisedBy: { select: { name: true, email: true } },
+            resolvedBy: { select: { name: true, email: true } },
             commission: { include: { opportunity: { include: { salon: { select: { name: true } } } } } },
           },
           orderBy: { createdAt: "desc" },
+          take: 25,
         })
       : Promise.resolve([]),
     prisma.syncedInvoice.aggregate({
       where: { status: "paid", refunded: false, disputed: false, paidAt: { gte: monthStart, lt: monthEnd } },
       _sum: { amountPaidCents: true },
     }),
+    admin
+      ? prisma.ownershipAuditLog.findMany({
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          include: { opportunity: { include: { salon: { select: { name: true } } } } },
+        })
+      : Promise.resolve([]),
   ]);
+
+  const dmCountMap = new Map(dmCallsByUser.map((r) => [r.userId ?? "", r._count._all]));
+  const meetingCountMap = new Map<string, number>();
+  for (const m of meetingsByUser) {
+    const id = m.opportunity.ownerId ?? "";
+    meetingCountMap.set(id, (meetingCountMap.get(id) ?? 0) + 1);
+  }
+  const goalMap = new Map(allMonthGoals.map((g) => [g.userId, g]));
+  const commissions = allMonthCommissions;
+  const goal = goalMap.get(selectedRepId) ?? null;
+  const dmCallsCount = dmCountMap.get(selectedRepId) ?? 0;
+  const meetingsCount = meetingCountMap.get(selectedRepId) ?? 0;
+
+  const teamComparison = admin
+    ? users.map((u) => {
+        const uDeals = allMonthCommissions.filter((c) => c.ownerId === u.id);
+        const uGoal = goalMap.get(u.id);
+        const uPayroll = calculateMonthlyPayroll({
+          targetMrrEur: uGoal?.targetMrrEur ?? DEFAULT_PLAN_RULES.standardTargetEur,
+          isRampMonth: uGoal?.isRampMonth ?? false,
+          dmCallsCount: dmCountMap.get(u.id) ?? 0,
+          meetingsCount: meetingCountMap.get(u.id) ?? 0,
+          deals: uDeals.map((d) => ({ id: d.id, mrrSignedEur: d.mrrSignedEur, cadence: d.cadence, discountPercent: d.discountPercent, status: d.status })),
+          rules: DEFAULT_PLAN_RULES,
+        });
+        return { user: u, dealCount: uDeals.length, payroll: uPayroll };
+      })
+    : [];
 
   const repDeals = commissions.filter((c) => c.ownerId === selectedRepId);
   const rules = repDeals[0]?.planVersion
@@ -205,6 +246,44 @@ export default async function RemunerationPage({
         </div>
       </section>
 
+      {/* Admin: Team-wide side-by-side comparison */}
+      {admin && teamComparison.length > 0 && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-base font-semibold text-slate-950">Comparaison de l’équipe ({month})</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  {["Commercial", "Deals", "MRR signé", "Objectif", "Atteinte", "Palier", "Variable à verser"].map((h) => (
+                    <th key={h} className="px-3 py-2 font-medium">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {teamComparison.map((row) => (
+                  <tr key={row.user.id} className={row.user.id === selectedRepId ? "bg-rose-50/40" : ""}>
+                    <td className="px-3 py-2.5">
+                      <Link href={`/remuneration?month=${month}&rep=${row.user.id}`} className="font-semibold text-slate-900 hover:text-rose-600">
+                        {row.user.name ?? row.user.email}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2.5">{row.dealCount}</td>
+                    <td className="px-3 py-2.5 font-medium">{row.payroll.validMrrEur.toLocaleString("fr-FR")} €</td>
+                    <td className="px-3 py-2.5 text-slate-500">{row.payroll.targetMrrEur.toLocaleString("fr-FR")} €</td>
+                    <td className="px-3 py-2.5 font-medium">{Math.round(row.payroll.attainmentRatio * 100)} %</td>
+                    <td className="px-3 py-2.5 font-semibold text-violet-700">×{row.payroll.currentMultiplier}</td>
+                    <td className="px-3 py-2.5 font-bold text-emerald-700">
+                      {row.payroll.payableEur.toLocaleString("fr-FR")} €
+                      {row.payroll.guaranteeApplied && <span className="ml-1 text-[11px] font-normal text-slate-500">(garantie)</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {/* 3-block monthly statement */}
       {[
         ["Commissions acquises & versées", paidOrAcquired, "border-emerald-200"],
@@ -306,23 +385,38 @@ export default async function RemunerationPage({
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-5">
-            <h2 className="text-base font-semibold text-slate-950">Contestations en cours ({openDisputes.length})</h2>
+            <h2 className="text-base font-semibold text-slate-950">Journal des contestations ({openDisputes.length}) & réattributions ({auditLogs.length})</h2>
             <div className="mt-3 space-y-3">
               {openDisputes.map((d) => (
                 <div key={d.id} className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 text-xs">
                   <p className="font-semibold text-slate-900">
-                    {d.commission.opportunity.salon.name} · {d.raisedBy.name ?? d.raisedBy.email} ({frenchDate(d.createdAt)})
+                    {d.commission.opportunity.salon.name} · {d.raisedBy.name ?? d.raisedBy.email} ({frenchDate(d.createdAt)}) · <span className="uppercase">{d.status}</span>
                   </p>
                   <p className="mt-1 text-slate-700">{d.reason}</p>
-                  <form action={resolveCommissionDispute} className="mt-2 flex flex-wrap gap-1.5">
-                    <input type="hidden" name="disputeId" value={d.id} />
-                    <input name="resolutionNote" required placeholder="Décision / commentaire Fodé…" className="h-8 flex-1 rounded border border-slate-200 bg-white px-2 text-xs" />
-                    <SubmitButton name="status" value="RESOLVED_ADJUSTED" className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white">Ajuster</SubmitButton>
-                    <SubmitButton name="status" value="REJECTED" className="rounded bg-rose-600 px-2.5 py-1 text-xs font-medium text-white">Rejeter</SubmitButton>
-                  </form>
+                  {d.resolutionNote && <p className="mt-1 text-emerald-800">Décision : {d.resolutionNote}</p>}
+                  {d.status === "OPEN" && (
+                    <form action={resolveCommissionDispute} className="mt-2 flex flex-wrap gap-1.5">
+                      <input type="hidden" name="disputeId" value={d.id} />
+                      <input name="resolutionNote" required placeholder="Décision / commentaire Fodé…" className="h-8 flex-1 rounded border border-slate-200 bg-white px-2 text-xs" />
+                      <SubmitButton name="status" value="RESOLVED_ADJUSTED" className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white">Ajuster</SubmitButton>
+                      <SubmitButton name="status" value="REJECTED" className="rounded bg-rose-600 px-2.5 py-1 text-xs font-medium text-white">Rejeter</SubmitButton>
+                    </form>
+                  )}
                 </div>
               ))}
-              {openDisputes.length === 0 && <p className="text-sm text-slate-400">Aucune contestation ouverte.</p>}
+              {auditLogs.length > 0 && (
+                <div className="border-t border-slate-100 pt-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Réattributions d’opportunités</p>
+                  <ul className="space-y-1.5 text-xs text-slate-600">
+                    {auditLogs.map((log) => (
+                      <li key={log.id} className="rounded bg-slate-50 px-2.5 py-1.5">
+                        <strong>{log.opportunity.salon.name}</strong> · {frenchDate(log.createdAt, true)} — {log.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {openDisputes.length === 0 && auditLogs.length === 0 && <p className="text-sm text-slate-400">Aucune contestation ni réattribution enregistrée.</p>}
             </div>
           </section>
         </div>

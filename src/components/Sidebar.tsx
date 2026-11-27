@@ -6,6 +6,7 @@ export function Sidebar({ user }: { user: { name?: string | null; email?: string
   const admin = user.role === "ADMIN";
   const links = [
     ["/dashboard", "Aujourd’hui", "◷"],
+    ["/pilotage", "Pilotage", "◫"],
     ["/pipeline", "Pipeline", "▦"],
     ["/taches", admin ? "Suivi des actions" : "Mes tâches", "✓"],
     ["/suggestions", "Suggestions IA", "✦"],

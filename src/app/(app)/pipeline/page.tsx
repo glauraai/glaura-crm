@@ -4,6 +4,7 @@ import { requireMember } from "@/lib/access";
 import { getAssignableUsers } from "@/lib/salons";
 import { moveOpportunityStage, reassignOpportunity } from "@/lib/pipeline/actions";
 import { OPPORTUNITY_STAGES, STAGE_META_MAP } from "@/lib/pipeline/stages";
+import { computeDealAgeDays } from "@/lib/pilotage/metrics";
 import { frenchDate } from "@/lib/crm-format";
 import { SubmitButton } from "@/components/SubmitButton";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ export default async function PipelinePage({
   const sp = await searchParams;
   const view = sp.view === "list" ? "list" : "kanban";
   const ownerFilter = admin ? sp.owner : user.id;
+  const now = new Date();
 
   const where = {
     salon: { archivedAt: null },
@@ -133,8 +135,11 @@ export default async function PipelinePage({
                         <span className="font-medium text-emerald-700">
                           {opp.monthlyAmountEur ? `${opp.monthlyAmountEur} € HT/m` : "MRR à préciser"}
                         </span>
-                        <span>{opp.owner?.name ?? opp.owner?.email ?? "Non attribué"}</span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                          J+{computeDealAgeDays(opp.createdAt, now)}
+                        </span>
                       </div>
+                      <p className="mt-1 text-[11px] text-slate-500">{opp.owner?.name ?? opp.owner?.email ?? "Non attribué"}</p>
                       {opp.nextStep && <p className="mt-1.5 truncate text-xs text-slate-600">→ {opp.nextStep}</p>}
                       {opp.lossReason && <p className="mt-1 text-xs text-rose-600">Motif : {opp.lossReason}</p>}
 
@@ -170,7 +175,7 @@ export default async function PipelinePage({
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                {["Salon & Deal", "Stade", "MRR HT/mois", "Prochaine étape", "Commercial", "Action"].map((h) => (
+                {["Salon & Deal", "Stade", "MRR HT/mois", "Âge", "Prochaine étape", "Commercial", "Action"].map((h) => (
                   <th key={h} className="px-4 py-3 font-medium">{h}</th>
                 ))}
               </tr>
@@ -178,6 +183,7 @@ export default async function PipelinePage({
             <tbody className="divide-y divide-slate-100">
               {opportunities.map((opp) => {
                 const meta = STAGE_META_MAP[opp.stage];
+                const ageDays = computeDealAgeDays(opp.createdAt, now);
                 return (
                   <tr key={opp.id} className="hover:bg-slate-50/70">
                     <td className="px-4 py-3">
@@ -189,6 +195,7 @@ export default async function PipelinePage({
                       {opp.ownerLockedAt && <p className="mt-1 text-[11px] text-emerald-700">Figé le {frenchDate(opp.ownerLockedAt)}</p>}
                     </td>
                     <td className="px-4 py-3 font-medium">{opp.monthlyAmountEur ? `${opp.monthlyAmountEur} €` : "—"}</td>
+                    <td className={cn("px-4 py-3 text-xs font-semibold", ageDays >= 14 ? "text-amber-700" : "text-slate-600")}>J+{ageDays}</td>
                     <td className="px-4 py-3 text-xs text-slate-600">
                       {opp.nextStep ?? "—"}
                       {opp.nextStepAt && <span className="block text-slate-400">{frenchDate(opp.nextStepAt)}</span>}
