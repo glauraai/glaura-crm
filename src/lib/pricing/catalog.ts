@@ -52,9 +52,11 @@ export const LAURA_OPTIONS: readonly LauraOptionSpec[] = [
   { code: "whatsapp", label: "Laura IA — WhatsApp", monthlyHtCents: 5900 },
   { code: "both", label: "Laura IA — Instagram + WhatsApp", monthlyHtCents: 9900 },
   { code: "phone", label: "Laura IA — Téléphone seul / supplément", monthlyHtCents: 9900 },
-  { code: "full", label: "Laura IA — Pack complet (IG + WA + Tél)", monthlyHtCents: 19800 },
+  { code: "full", label: "Laura IA — Pack complet (IG + WA + Tél)", monthlyHtCents: 19900 },
   { code: "marketing_only", label: "Laura Marketing seul", monthlyHtCents: 5900 },
 ] as const;
+
+export const STRIPE_LAURA_CHANNEL_CODES = ["instagram", "whatsapp", "both", "phone", "full"] as const;
 
 export const SYNC_OPTION_CENTS = 1900; // Synchronisation Planity / Treatwell : 19 € HT/mois
 export const VAT_RATE = 0.2;
@@ -139,4 +141,62 @@ export function calculateOfferPricing(input: OfferPricingInput): OfferPricingRes
 
 export function formatEurCents(cents: number): string {
   return `${(cents / 100).toLocaleString("fr-FR", { minimumFractionDigits: cents % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 })} €`;
+}
+
+export type StripeOfferLinkBuildResult =
+  | { ok: true; body: Record<string, unknown>; syncExcludedFromStripe: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Builds the exact JSON payload expected by `POST /billing/stripe/admin-create-offer-link`
+ * in goglow-firebase (`adminOfferLink.js` + `adminAnnualOffer.js`):
+ * - Standard annual_1x (10x) & annual_3x (11x/3) already bake in 2 / 1 free months in Stripe,
+ *   so `freeMonths` MUST be 0 unless extra negotiated free months are granted.
+ * - Monthly `customMonthlyPriceCents` must stay within `[stripeLauraCents, planCents + stripeLauraCents]`,
+ *   excluding CRM-only items not yet in Stripe (e.g. Sync +19 EUR).
+ */
+export function buildStripeOfferLinkPayload(input: {
+  providerId: string;
+  planCode: string;
+  cadence: BillingCadence;
+  lauraChannels: string | null;
+  discountPercent?: number;
+  syncIncluded?: boolean;
+  extraFreeMonths?: number;
+}): StripeOfferLinkBuildResult {
+  const plan = GLAURA_PLANS.find((p) => p.code === input.planCode);
+  if (!plan?.stripeV3Code) {
+    return { ok: false, error: "Offre non mappée au catalogue Stripe V3." };
+  }
+
+  const billingCadence =
+    input.cadence === "ANNUAL_1X" ? "annual_1x" : input.cadence === "ANNUAL_3X" ? "annual_3x" : "monthly";
+  const isStripeLaura = Boolean(
+    input.lauraChannels &&
+      (STRIPE_LAURA_CHANNEL_CODES as readonly string[]).includes(input.lauraChannels),
+  );
+  const stripeLauraCents = isStripeLaura
+    ? (LAURA_OPTIONS.find((o) => o.code === input.lauraChannels)?.monthlyHtCents ?? 0)
+    : 0;
+  const stripeCatalogMonthlyCents = plan.monthlyHtCents + stripeLauraCents;
+  const discount = Math.max(0, Math.min(90, Number.isFinite(input.discountPercent ?? 0) ? (input.discountPercent ?? 0) : 0));
+  const rawMonthlyCents = Math.round(stripeCatalogMonthlyCents * (1 - discount / 100));
+  const customMonthlyPriceCents = Math.max(
+    stripeLauraCents > 0 ? stripeLauraCents : 1,
+    Math.min(stripeCatalogMonthlyCents, rawMonthlyCents),
+  );
+  const extraFree = Math.max(0, Math.min(billingCadence === "annual_1x" ? 9 : 10, Math.trunc(input.extraFreeMonths ?? 0)));
+
+  const body: Record<string, unknown> = {
+    providerId: input.providerId,
+    planCode: plan.stripeV3Code,
+    billingCadence,
+    laura: isStripeLaura,
+    ...(isStripeLaura ? { lauraChannels: input.lauraChannels } : {}),
+    ...(billingCadence === "monthly"
+      ? { customMonthlyPriceCents, duration: "forever" }
+      : { freeMonths: extraFree }),
+  };
+
+  return { ok: true, body, syncExcludedFromStripe: Boolean(input.syncIncluded) };
 }

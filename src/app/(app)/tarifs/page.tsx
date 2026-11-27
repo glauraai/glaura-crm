@@ -45,7 +45,7 @@ export default async function TarifsPage({
       )}
 
       {/* Reference Catalog Cards */}
-      <section className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+      <section className="grid gap-4 md:grid-cols-3">
         {GLAURA_PLANS.map((plan) => (
           <div key={plan.code} className="flex flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
             <p className="text-xs font-semibold uppercase tracking-wide text-rose-600">{plan.targetSegment}</p>
@@ -78,7 +78,7 @@ export default async function TarifsPage({
               </li>
             ))}
             <li className="flex justify-between py-2">
-              <span className="text-slate-700">Synchronisation Planity / Treatwell</span>
+              <span className="text-slate-700">Synchronisation Planity / Treatwell <span className="text-xs text-slate-400">(suivi CRM · hors lien Stripe)</span></span>
               <span className="font-semibold text-slate-950">{formatEurCents(SYNC_OPTION_CENTS)}</span>
             </li>
           </ul>

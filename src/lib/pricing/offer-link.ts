@@ -1,7 +1,7 @@
 import "server-only";
 import type { BillingCadence } from "@/generated/prisma/enums";
 import { getAuth } from "@/lib/firebase-admin";
-import { GLAURA_PLANS } from "./catalog";
+import { buildStripeOfferLinkPayload } from "./catalog";
 
 async function resolveBillingAdminToken(): Promise<string | null> {
   const staticToken = process.env.GLAURA_BILLING_ADMIN_TOKEN?.trim();
@@ -39,15 +39,15 @@ export async function requestStripeOfferLink(input: {
   planCode: string;
   cadence: BillingCadence;
   lauraChannels: string | null;
-  netMonthlyCents: number;
-  freeMonths: number;
-}): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  discountPercent?: number;
+  syncIncluded?: boolean;
+  extraFreeMonths?: number;
+}): Promise<{ ok: true; url: string; syncExcludedFromStripe: boolean } | { ok: false; error: string }> {
+  const built = buildStripeOfferLinkPayload(input);
+  if (!built.ok) return built;
+
   const token = await resolveBillingAdminToken();
   const base = (process.env.GLAURA_GATEWAY_URL?.trim() || "https://api.glaura.ai").replace(/\/+$/, "");
-  const plan = GLAURA_PLANS.find((p) => p.code === input.planCode);
-  if (!plan?.stripeV3Code) {
-    return { ok: false, error: "Offre non mappée au catalogue Stripe V3." };
-  }
   if (!token) {
     return {
       ok: false,
@@ -56,24 +56,6 @@ export async function requestStripeOfferLink(input: {
     };
   }
 
-  const billingCadence =
-    input.cadence === "ANNUAL_1X" ? "annual_1x" : input.cadence === "ANNUAL_3X" ? "annual_3x" : "monthly";
-  const hasLaura = Boolean(
-    input.lauraChannels &&
-      ["instagram", "whatsapp", "both", "phone", "full"].includes(input.lauraChannels),
-  );
-
-  const body: Record<string, unknown> = {
-    providerId: input.providerId,
-    planCode: plan.stripeV3Code,
-    billingCadence,
-    laura: hasLaura,
-    ...(hasLaura ? { lauraChannels: input.lauraChannels } : {}),
-    ...(billingCadence === "monthly"
-      ? { customMonthlyPriceCents: input.netMonthlyCents, duration: "forever" }
-      : { freeMonths: input.freeMonths }),
-  };
-
   try {
     const res = await fetch(`${base}/billing/stripe/admin-create-offer-link`, {
       method: "POST",
@@ -81,7 +63,7 @@ export async function requestStripeOfferLink(input: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(built.body),
       signal: AbortSignal.timeout(20_000),
     });
     const data = (await res.json()) as { url?: string; checkoutUrl?: string; message?: string; error?: string };
@@ -90,7 +72,7 @@ export async function requestStripeOfferLink(input: {
     }
     const url = data.url ?? data.checkoutUrl;
     if (!url) return { ok: false, error: "Aucun lien retourné par la passerelle." };
-    return { ok: true, url };
+    return { ok: true, url, syncExcludedFromStripe: built.syncExcludedFromStripe };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erreur réseau passerelle Stripe." };
   }

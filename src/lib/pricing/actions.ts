@@ -50,11 +50,14 @@ export async function createSubscriptionOffer(fd: FormData) {
         planCode: d.planCode,
         cadence: d.cadence as BillingCadence,
         lauraChannels: d.lauraChannels && d.lauraChannels !== "none" ? d.lauraChannels : null,
-        netMonthlyCents: pricing.netMonthlyCents,
-        freeMonths: pricing.freeMonths,
+        discountPercent: d.discountPercent,
+        syncIncluded: d.syncIncluded === "on" || d.syncIncluded === "true",
       });
       if (linkRes.ok) {
         checkoutUrl = linkRes.url;
+        if (linkRes.syncExcludedFromStripe) {
+          notice = "Lien Stripe généré (l’option Sync +19 € est enregistrée au CRM mais pas encore facturée dans Stripe).";
+        }
       } else {
         notice = linkRes.error;
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateOfferPricing, GLAURA_PLANS } from "./catalog";
+import { buildStripeOfferLinkPayload, calculateOfferPricing, GLAURA_PLANS, LAURA_OPTIONS } from "./catalog";
 
 describe("Glaura subscription pricing & payment calculator", () => {
   it("computes monthly HT, 20% VAT, TTC and signed MRR accurately", () => {
@@ -77,5 +77,66 @@ describe("Glaura subscription pricing & payment calculator", () => {
     });
     expect(discounted.netMonthlyCents).toBe(6320);
     expect(discounted.commissionDiscountFactor).toBe(0.8);
+  });
+
+  it("matches Stripe V3 catalog prices and builds valid admin-create-offer-link payloads", () => {
+    const fullLaura = LAURA_OPTIONS.find((o) => o.code === "full");
+    expect(fullLaura?.monthlyHtCents).toBe(19900);
+
+    // Annual 1x & 3x MUST pass freeMonths: 0 (catalog already bakes in 2 / 1 free months)
+    const annual1x = buildStripeOfferLinkPayload({
+      providerId: "prov-1",
+      planCode: "salon_solo",
+      cadence: "ANNUAL_1X",
+      lauraChannels: "both",
+      syncIncluded: true,
+    });
+    expect(annual1x.ok).toBe(true);
+    if (annual1x.ok) {
+      expect(annual1x.body).toEqual({
+        providerId: "prov-1",
+        planCode: "solo_pro_v3",
+        billingCadence: "annual_1x",
+        laura: true,
+        lauraChannels: "both",
+        freeMonths: 0,
+      });
+      expect(annual1x.syncExcludedFromStripe).toBe(true);
+    }
+
+    // Monthly with syncIncluded must NOT exceed planCents + lauraCents
+    const monthly = buildStripeOfferLinkPayload({
+      providerId: "prov-1",
+      planCode: "salon_v3",
+      cadence: "MONTHLY",
+      lauraChannels: "instagram",
+      discountPercent: 0,
+      syncIncluded: true,
+    });
+    expect(monthly.ok).toBe(true);
+    if (monthly.ok) {
+      expect(monthly.body).toEqual({
+        providerId: "prov-1",
+        planCode: "salon_v3",
+        billingCadence: "monthly",
+        laura: true,
+        lauraChannels: "instagram",
+        customMonthlyPriceCents: 13800, // 79 + 59 (excludes CRM-only 19 EUR sync)
+        duration: "forever",
+      });
+    }
+
+    // Monthly discount preserves full Laura price floor (adminOfferLink.js rule)
+    const heavyDiscount = buildStripeOfferLinkPayload({
+      providerId: "prov-1",
+      planCode: "salon_solo",
+      cadence: "MONTHLY",
+      lauraChannels: "both",
+      discountPercent: 80,
+    });
+    expect(heavyDiscount.ok).toBe(true);
+    if (heavyDiscount.ok) {
+      expect(heavyDiscount.body.customMonthlyPriceCents).toBe(9900);
+    }
   });
 });

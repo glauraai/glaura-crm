@@ -120,7 +120,7 @@ export function PricingCalculator({
       <div className="flex flex-wrap gap-5 text-sm text-slate-700">
         <label className="flex items-center gap-2">
           <input type="checkbox" name="syncIncluded" checked={syncIncluded} onChange={(e) => setSyncIncluded(e.target.checked)} />
-          Synchronisation Planity / Treatwell (+{formatEurCents(SYNC_OPTION_CENTS)} HT/mois)
+          Synchronisation Planity / Treatwell (+{formatEurCents(SYNC_OPTION_CENTS)} HT/mois · hors lien Stripe)
         </label>
         <label className="flex items-center gap-2">
           <input type="checkbox" name="generateStripeLink" checked={generateStripeLink} onChange={(e) => setGenerateStripeLink(e.target.checked)} />
