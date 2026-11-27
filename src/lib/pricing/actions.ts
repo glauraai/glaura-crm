@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireMember } from "@/lib/access";
+import { isManagerOrAdmin, requireMember } from "@/lib/access";
 import type { BillingCadence } from "@/generated/prisma/enums";
 import { calculateOfferPricing } from "./catalog";
 import { requestStripeOfferLink } from "./offer-link";
@@ -24,7 +24,7 @@ export async function createSubscriptionOffer(fd: FormData) {
   }).parse(Object.fromEntries(fd));
 
   const salon = await prisma.salon.findFirst({
-    where: { id: d.salonId, archivedAt: null, ...(user.role === "ADMIN" ? {} : { assignedToId: user.id }) },
+    where: { id: d.salonId, archivedAt: null, ...(isManagerOrAdmin(user) ? {} : { assignedToId: user.id }) },
     include: { onboardingJobs: { where: { accountUid: { not: null } }, orderBy: { createdAt: "desc" }, take: 1 } },
   });
   if (!salon) throw new Error("Salon introuvable ou inaccessible.");

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { activeDailyPriorityDateFilter } from "@/lib/dailyPriority";
 import { phoneSearchTerm } from "@/lib/phone";
+import { isManagerOrAdmin } from "@/lib/roles";
 import { LeadSource, Metier, SalonStatus, SalonType } from "@/generated/prisma/enums";
 
 export type ViewerScope = {
@@ -22,7 +23,7 @@ export type SalonFilters = {
 
 function scopedOwnerId(f: SalonFilters, viewer?: ViewerScope): string | undefined {
   if (!viewer) return f.owner;
-  return viewer.role === "ADMIN" ? f.owner : viewer.id;
+  return isManagerOrAdmin(viewer) ? f.owner : viewer.id;
 }
 
 // Stored phone numbers are unnormalized, so an ILIKE on the raw column misses
@@ -92,7 +93,7 @@ export async function getSalon(id: string, viewer?: ViewerScope) {
   return prisma.salon.findFirst({
     where: {
       id,
-      ...(viewer && viewer.role !== "ADMIN" ? { assignedToId: viewer.id } : {}),
+      ...(viewer && !isManagerOrAdmin(viewer) ? { assignedToId: viewer.id } : {}),
     },
     include: {
       prospect: { select: { source: true, sourceUrl: true, treatwellUrl: true, planityUrl: true, dualPlatformCheckedAt: true } },
@@ -130,7 +131,7 @@ export async function getStatusCounts(viewer?: ViewerScope): Promise<Record<stri
     by: ["status"],
     where: {
       archivedAt: null,
-      ...(viewer && viewer.role !== "ADMIN" ? { assignedToId: viewer.id } : {}),
+      ...(viewer && !isManagerOrAdmin(viewer) ? { assignedToId: viewer.id } : {}),
     },
     _count: { _all: true },
   });

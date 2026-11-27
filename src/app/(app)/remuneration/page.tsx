@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { requireMember } from "@/lib/access";
+import { isAdmin, isManagerOrAdmin, requireMember } from "@/lib/access";
 import { getAssignableUsers } from "@/lib/salons";
 import {
   DEFAULT_PLAN_RULES,
@@ -9,6 +9,7 @@ import {
   monthKeyForDate,
 } from "@/lib/commissions/engine";
 import {
+  markCommissionPaid,
   raiseCommissionDispute,
   resolveCommissionDispute,
   saveSalesGoal,
@@ -34,7 +35,8 @@ export default async function RemunerationPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const user = await requireMember();
-  const admin = user.role === "ADMIN";
+  const admin = isManagerOrAdmin(user);
+  const strictAdmin = isAdmin(user);
   const sp = await searchParams;
   const month = sp.month && /^\d{4}-\d{2}$/.test(sp.month) ? sp.month : monthKeyForDate();
   const selectedRepId = admin ? (sp.rep || user.id) : user.id;
@@ -320,7 +322,17 @@ export default async function RemunerationPage({
                         <td className="px-3 py-2.5 font-medium">{c.mrrSignedEur} €</td>
                         <td className="px-3 py-2.5 text-xs">{c.paidInvoicesCount}</td>
                         <td className="px-3 py-2.5 font-semibold text-emerald-700">{finalAmt.toLocaleString("fr-FR")} €</td>
-                        <td className="px-3 py-2.5 text-xs">{STATUS_LABEL[c.status] ?? c.status}</td>
+                        <td className="px-3 py-2.5 text-xs">
+                          <span>{STATUS_LABEL[c.status] ?? c.status}</span>
+                          {strictAdmin && c.status === "ACQUISE" && (
+                            <form action={markCommissionPaid} className="mt-1">
+                              <input type="hidden" name="commissionId" value={c.id} />
+                              <SubmitButton className="rounded bg-emerald-600 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-emerald-700">
+                                Marquer versée
+                              </SubmitButton>
+                            </form>
+                          )}
+                        </td>
                         <td className="px-3 py-2.5">
                           {canDispute ? (
                             <form action={raiseCommissionDispute} className="flex gap-1.5">

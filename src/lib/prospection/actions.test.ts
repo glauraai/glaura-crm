@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({ user: { id: "rep", role: "COMMERCIAL" }, update: vi.fn(), taskUpdate: vi.fn(), prospect: vi.fn(), salonCreate: vi.fn(), transaction: vi.fn() }));
-vi.mock("@/lib/access", () => ({ requireMember: async () => state.user, requireAdmin: async () => { if (state.user.role !== "ADMIN") throw new Error("ADMIN_ONLY"); return state.user; }, prospectScope: (user: { id: string; role: string }) => user.role === "ADMIN" ? {} : { OR: [{ assignedToId: user.id }, { assignedToId: null, tournee: { assignedToId: user.id } }] } }));
+vi.mock("@/lib/access", () => ({
+  requireMember: async () => state.user,
+  requireAdmin: async () => { if (state.user.role !== "ADMIN") throw new Error("ADMIN_ONLY"); return state.user; },
+  requireManager: async () => { if (state.user.role !== "ADMIN" && state.user.role !== "MANAGER") throw new Error("MANAGER_ONLY"); return state.user; },
+  prospectScope: (user: { id: string; role: string }) => (user.role === "ADMIN" || user.role === "MANAGER") ? {} : { OR: [{ assignedToId: user.id }, { assignedToId: null, tournee: { assignedToId: user.id } }] },
+}));
 vi.mock("@/lib/db", () => ({ prisma: { $transaction: state.transaction } }));
 vi.mock("@/lib/slugs", () => ({ uniqueSalonSlug: async () => "salon-test" }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -13,8 +18,8 @@ beforeEach(() => {
 });
 describe("prospect mutation permissions", () => {
   it("prevents a rep from generating or releasing global rounds", async () => {
-    await expect(generateTournee(form())).rejects.toThrow("ADMIN_ONLY");
-    await expect(releaseProspect(form())).rejects.toThrow("ADMIN_ONLY");
+    await expect(generateTournee(form())).rejects.toThrow("MANAGER_ONLY");
+    await expect(releaseProspect(form())).rejects.toThrow("MANAGER_ONLY");
     expect(state.transaction).not.toHaveBeenCalled();
   });
   it("cannot discard another salesperson’s prospect", async () => {

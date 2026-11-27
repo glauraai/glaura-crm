@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { requireMember } from "@/lib/access";
+import { isManagerOrAdmin, requireMember } from "@/lib/access";
 import { GLAURA_PLANS, LAURA_OPTIONS, SYNC_OPTION_CENTS, formatEurCents } from "@/lib/pricing/catalog";
 import { PricingCalculator } from "@/components/PricingCalculator";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
@@ -12,7 +12,7 @@ export default async function TarifsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const user = await requireMember();
-  const admin = user.role === "ADMIN";
+  const admin = isManagerOrAdmin(user);
   const sp = await searchParams;
 
   const [salons, recentOffers] = await Promise.all([

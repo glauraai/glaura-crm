@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { requireMember } from "@/lib/access";
+import { isManagerOrAdmin, requireMember } from "@/lib/access";
 import { getAssignableUsers } from "@/lib/salons";
 import {
   computeDealAgeDays,
@@ -31,7 +32,8 @@ export default async function PilotagePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const user = await requireMember();
-  const admin = user.role === "ADMIN";
+  if (!isManagerOrAdmin(user)) redirect("/dashboard");
+  const admin = true;
   const sp = await searchParams;
   const now = new Date();
   const range = resolvePilotageRange({ range: sp.range, from: sp.from, to: sp.to }, now);

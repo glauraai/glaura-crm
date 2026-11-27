@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { completeReminder } from "@/lib/actions";
-import { requireMember, prospectScope } from "@/lib/access";
+import { isManagerOrAdmin, requireMember, prospectScope } from "@/lib/access";
 import { createSalesTask, finishSalesTask } from "@/lib/task-actions";
 import { getAssignableUsers } from "@/lib/salons";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -12,7 +12,7 @@ const button = "rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white 
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requireMember();
-  const admin = user.role === "ADMIN";
+  const admin = isManagerOrAdmin(user);
   const sp = await searchParams;
   const done = sp.view === "done";
   const owner = admin ? sp.owner : user.id;

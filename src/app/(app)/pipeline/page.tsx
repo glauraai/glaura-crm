@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { requireMember } from "@/lib/access";
+import { isManagerOrAdmin, requireMember } from "@/lib/access";
 import { getAssignableUsers } from "@/lib/salons";
 import { moveOpportunityStage, reassignOpportunity } from "@/lib/pipeline/actions";
 import { OPPORTUNITY_STAGES, STAGE_META_MAP } from "@/lib/pipeline/stages";
@@ -17,7 +17,7 @@ export default async function PipelinePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const user = await requireMember();
-  const admin = user.role === "ADMIN";
+  const admin = isManagerOrAdmin(user);
   const sp = await searchParams;
   const view = sp.view === "list" ? "list" : "kanban";
   const ownerFilter = admin ? sp.owner : user.id;

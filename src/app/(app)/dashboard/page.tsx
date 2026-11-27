@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/db";
 import { frenchDate } from "@/lib/crm-format";
-import { canAccessInstagram } from "@/lib/access";
+import { canAccessInstagram, isManagerOrAdmin, requireMember } from "@/lib/access";
 import Link from "next/link";
-import { requireMember } from "@/lib/access";
 import { getDashboard } from "@/lib/dashboard";
 import { getSalonOwners } from "@/lib/salons";
 import { TYPE_STYLE } from "@/lib/labels";
@@ -27,7 +26,7 @@ export default async function DashboardPage({
   const sp = await searchParams;
   const session = { user: await requireMember() };
   const viewer = session?.user ? { id: session.user.id, role: session.user.role } : undefined;
-  const isAdmin = viewer?.role === "ADMIN";
+  const isAdmin = isManagerOrAdmin(viewer);
   const selectedOwnerId = isAdmin ? sp.owner : viewer?.id;
   const now = new Date();
   const [dashboard, owners] = await Promise.all([

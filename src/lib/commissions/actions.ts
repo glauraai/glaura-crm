@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireAdmin, requireMember } from "@/lib/access";
+import { isManagerOrAdmin, requireAdmin, requireManager, requireMember } from "@/lib/access";
 import { isDisputeWindowOpen } from "./engine";
 import { syncBillingAndCommissions } from "./stripe-sync";
 
@@ -14,7 +14,7 @@ export async function raiseCommissionDispute(fd: FormData) {
   const reason = z.string().trim().min(5).max(2000).parse(fd.get("reason"));
 
   const comm = await prisma.commission.findFirst({
-    where: { id: commissionId, ...(user.role === "ADMIN" ? {} : { ownerId: user.id }) },
+    where: { id: commissionId, ...(isManagerOrAdmin(user) ? {} : { ownerId: user.id }) },
   });
   if (!comm) throw new Error("Commission introuvable.");
   if (!isDisputeWindowOpen(comm.settledAt)) {
@@ -29,20 +29,35 @@ export async function raiseCommissionDispute(fd: FormData) {
 }
 
 export async function resolveCommissionDispute(fd: FormData) {
-  const admin = await requireAdmin();
+  const reviewer = await requireManager();
   const disputeId = z.string().min(1).parse(fd.get("disputeId"));
   const status = z.enum(["RESOLVED_UPHELD", "RESOLVED_ADJUSTED", "REJECTED"]).parse(fd.get("status"));
   const resolutionNote = z.string().trim().min(2).max(2000).parse(fd.get("resolutionNote"));
 
   await prisma.commissionDispute.update({
     where: { id: disputeId },
-    data: { status, resolutionNote, resolvedById: admin.id, resolvedAt: new Date() },
+    data: { status, resolutionNote, resolvedById: reviewer.id, resolvedAt: new Date() },
   });
   revalidatePath("/remuneration");
 }
 
-export async function saveSalesGoal(fd: FormData) {
+/** Strictly ADMIN-only: marks an acquired commission as paid out (VERSEE). */
+export async function markCommissionPaid(fd: FormData) {
   await requireAdmin();
+  const commissionId = z.string().min(1).parse(fd.get("commissionId"));
+  const updated = await prisma.commission.updateMany({
+    where: { id: commissionId, status: "ACQUISE" },
+    data: { status: "VERSEE", settledAt: new Date() },
+  });
+  if (updated.count === 0) {
+    redirect(`/remuneration?error=${encodeURIComponent("Seule une commission acquise peut être marquée versée.")}`);
+  }
+  revalidatePath("/remuneration");
+  redirect("/remuneration?notice=Commission%20marqu%C3%A9e%20vers%C3%A9e.");
+}
+
+export async function saveSalesGoal(fd: FormData) {
+  await requireManager();
   const d = z.object({
     userId: z.string().min(1),
     periodKey: z.string().regex(/^\d{4}-\d{2}$/),
@@ -70,13 +85,15 @@ export async function saveSalesGoal(fd: FormData) {
     },
   });
   revalidatePath("/remuneration");
+  revalidatePath("/pilotage");
   revalidatePath("/dashboard");
 }
 
 export async function triggerBillingSync() {
-  await requireAdmin();
+  await requireManager();
   const res = await syncBillingAndCommissions();
   revalidatePath("/remuneration");
+  revalidatePath("/pilotage");
   revalidatePath("/pipeline");
   const msg = res.skippedReason
     ? res.skippedReason

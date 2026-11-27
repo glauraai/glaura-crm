@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireAdmin, requireMember } from "@/lib/access";
+import { isManagerOrAdmin, requireManager, requireMember } from "@/lib/access";
 import { canonicalizePhone } from "@/lib/phone";
 import { convertProspectInTx } from "@/lib/prospection/convert";
 import type { OpportunityStage } from "@/generated/prisma/enums";
@@ -42,7 +42,7 @@ export async function createOpportunity(fd: FormData) {
   const monthlyAmountEur = rawAmount && String(rawAmount).trim() ? Number(rawAmount) : null;
 
   const salon = await prisma.salon.findFirst({
-    where: { id: salonId, archivedAt: null, ...(user.role === "ADMIN" ? {} : { assignedToId: user.id }) },
+    where: { id: salonId, archivedAt: null, ...(isManagerOrAdmin(user) ? {} : { assignedToId: user.id }) },
     select: { id: true, assignedToId: true },
   });
   if (!salon) throw new Error("Salon introuvable ou inaccessible.");
@@ -82,7 +82,7 @@ export async function moveOpportunityStage(fd: FormData) {
   const opp = await prisma.opportunity.findFirst({
     where: {
       id: opportunityId,
-      ...(user.role === "ADMIN" ? {} : { OR: [{ ownerId: user.id }, { salon: { assignedToId: user.id } }] }),
+      ...(isManagerOrAdmin(user) ? {} : { OR: [{ ownerId: user.id }, { salon: { assignedToId: user.id } }] }),
     },
     include: { salon: { select: { id: true, assignedToId: true } }, subscriptions: { orderBy: { createdAt: "desc" }, take: 1 } },
   });
@@ -170,7 +170,7 @@ export async function moveOpportunityStage(fd: FormData) {
 }
 
 export async function reassignOpportunity(fd: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requireManager();
   const opportunityId = z.string().min(1).parse(fd.get("opportunityId"));
   const toUserId = z.string().min(1).parse(fd.get("toUserId"));
   const reason = z.string().trim().min(3).max(500).parse(fd.get("reason"));
@@ -205,7 +205,7 @@ export async function addContact(fd: FormData) {
   }).parse(Object.fromEntries(fd));
 
   const salon = await prisma.salon.findFirst({
-    where: { id: d.salonId, archivedAt: null, ...(user.role === "ADMIN" ? {} : { assignedToId: user.id }) },
+    where: { id: d.salonId, archivedAt: null, ...(isManagerOrAdmin(user) ? {} : { assignedToId: user.id }) },
     select: { id: true },
   });
   if (!salon) throw new Error("Salon introuvable ou inaccessible.");
@@ -238,7 +238,7 @@ export async function claimProspectToPortfolio(fd: FormData) {
   try {
     const monthStart = startOfCurrentParisMonth();
     await prisma.$transaction(async (tx) => {
-      if (user.role !== "ADMIN") {
+      if (!isManagerOrAdmin(user)) {
         const claimedCount = await tx.prospect.count({
           where: { assignedToId: user.id, claimedAt: { gte: monthStart } },
         });

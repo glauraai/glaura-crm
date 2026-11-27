@@ -1,7 +1,7 @@
 import { InstagramCandidates } from "@/components/prospection/InstagramCandidates";
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
-import { requireMember } from "@/lib/access";
+import { isManagerOrAdmin, requireMember } from "@/lib/access";
 import { getAssignableUsers } from "@/lib/salons";
 import { assignProspects, convertProspect, discardProspect, generateTournee, releaseProspect } from "@/lib/prospection/actions";
 import { claimProspectToPortfolio } from "@/lib/pipeline/actions";
@@ -30,7 +30,7 @@ const button = "rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white 
 
 export default async function ProspectionPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requireMember();
-  const admin = user.role === "ADMIN";
+  const admin = isManagerOrAdmin(user);
   const sp = await searchParams;
   const tab = admin && sp.tab === "runs" ? "runs" : sp.tab === "rounds" ? "rounds" : !admin && sp.tab === "shared" ? "shared" : "pool";
   const effectiveUser = tab === "shared" ? { id: user.id, role: "ADMIN" } : user;

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/access";
+import { requireManager } from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { exportPayrollCsv, monthKeyForDate } from "@/lib/commissions/engine";
 
 export async function GET(req: Request) {
   try {
-    await requireAdmin();
+    await requireManager();
   } catch {
-    return NextResponse.json({ error: "Accès réservé à l'administration." }, { status: 403 });
+    return NextResponse.json({ error: "Accès réservé au management commercial." }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { requireMember } from "@/lib/access";
+import { isManagerOrAdmin, requireMember } from "@/lib/access";
 import { attachUnmatchedTranscript, reviewSuggestion, uploadTranscript } from "@/lib/agents/actions";
 import { computeSuggestionDiff } from "@/lib/agents/echo";
 import { OPPORTUNITY_STAGES } from "@/lib/pipeline/stages";
@@ -16,7 +16,7 @@ export default async function SuggestionsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const user = await requireMember();
-  const admin = user.role === "ADMIN";
+  const admin = isManagerOrAdmin(user);
   const sp = await searchParams;
   const tab = sp.tab === "history" ? "history" : sp.tab === "transcripts" ? "transcripts" : "pending";
 

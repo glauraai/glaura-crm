@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireMember } from "@/lib/access";
+import { isManagerOrAdmin, requireMember } from "@/lib/access";
 import { mapStageToSalonStatus, OPPORTUNITY_STAGE_ORDER, startOfCurrentParisMonth } from "@/lib/pipeline/stages";
 import { fetchAlloTranscript } from "./allo";
 import { runEchoExtraction, twelveMonthsAgo } from "./echo";
@@ -130,7 +130,7 @@ export async function uploadTranscript(fd: FormData) {
   }).parse(Object.fromEntries(fd));
 
   const salon = await prisma.salon.findFirst({
-    where: { id: d.salonId, archivedAt: null, ...(user.role === "ADMIN" ? {} : { assignedToId: user.id }) },
+    where: { id: d.salonId, archivedAt: null, ...(isManagerOrAdmin(user) ? {} : { assignedToId: user.id }) },
     select: { id: true },
   });
   if (!salon) throw new Error("Salon introuvable ou inaccessible.");
@@ -174,7 +174,7 @@ export async function attachUnmatchedTranscript(fd: FormData) {
   const salonId = z.string().min(1).parse(fd.get("salonId"));
 
   const salon = await prisma.salon.findFirst({
-    where: { id: salonId, archivedAt: null, ...(user.role === "ADMIN" ? {} : { assignedToId: user.id }) },
+    where: { id: salonId, archivedAt: null, ...(isManagerOrAdmin(user) ? {} : { assignedToId: user.id }) },
     select: { id: true },
   });
   if (!salon) throw new Error("Salon introuvable ou inaccessible.");
@@ -216,7 +216,7 @@ export async function reviewSuggestion(fd: FormData) {
     where: {
       id,
       status: "PENDING",
-      ...(user.role === "ADMIN" ? {} : { OR: [{ assignedToId: user.id }, { salon: { assignedToId: user.id } }] }),
+      ...(isManagerOrAdmin(user) ? {} : { OR: [{ assignedToId: user.id }, { salon: { assignedToId: user.id } }] }),
     },
   });
   if (!suggestion) throw new Error("Suggestion introuvable ou déjà traitée.");

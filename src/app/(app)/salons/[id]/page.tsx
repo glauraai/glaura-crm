@@ -2,7 +2,7 @@ import { LEAD_TEMPERATURE_LABEL } from "@/lib/labels";
 import Link from "next/link";
 import { LeadProvenance } from "@/components/LeadProvenance";
 import { notFound } from "next/navigation";
-import { requireMember } from "@/lib/access";
+import { isAdmin, isManagerOrAdmin, requireMember } from "@/lib/access";
 import { frenchDate } from "@/lib/crm-format";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EmailFollowUpForm } from "@/components/EmailFollowUpForm";
@@ -78,10 +78,11 @@ export default async function SalonDetailPage({
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const session = { user: await requireMember() };
   const me = session?.user;
-  const isAdmin = me?.role === "ADMIN";
+  const canManage = isManagerOrAdmin(me);
+  const isAdminOnly = isAdmin(me);
   const [salon, assignableUsers, emailTemplates, myAccount] = await Promise.all([
     getSalon(id, me ? { id: me.id, role: me.role } : undefined),
-    isAdmin ? getAssignableUsers() : Promise.resolve([]),
+    canManage ? getAssignableUsers() : Promise.resolve([]),
     // Archived templates stay out of the dropdown but remain joinable from the
     // jobs they already produced.
     prisma.emailTemplate.findMany({
@@ -185,7 +186,7 @@ export default async function SalonDetailPage({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* Left: info + status + onboarding */}
         <div className="space-y-5">
-          <SalonEditModal action={updateSalon.bind(null, id)} salon={editSalon} isAdmin={isAdmin} assignableUsers={assignableUsers} priorityActive={priorityActive}>
+          <SalonEditModal action={updateSalon.bind(null, id)} salon={editSalon} isAdmin={canManage} assignableUsers={assignableUsers} priorityActive={priorityActive}>
             <div className={cn(card, "cursor-pointer transition hover:border-rose-300 hover:shadow-md")}>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-slate-900">Informations</h2>
@@ -297,7 +298,7 @@ export default async function SalonDetailPage({
                   </a>
                 )}
                 {latestJob.error && <p className="mt-2 text-sm text-rose-700">{latestJob.error}</p>}
-                {latestJob.status === "REVIEW_REQUIRED" && isAdmin && (
+                {latestJob.status === "REVIEW_REQUIRED" && isAdminOnly && (
                   <form action={approveProIdentityAndRetry.bind(null, latestJob.id)} className="mt-3">
                     <button className="w-full rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-600">
                       Valider l&apos;identité et relancer
@@ -385,7 +386,7 @@ export default async function SalonDetailPage({
               }}
               templates={emailTemplates}
               onboardingValues={onboardingValues}
-              isAdmin={isAdmin}
+              isAdmin={canManage}
             />
             {salon.emailJobs.length > 0 && (
               <ul className="mt-4 space-y-2">

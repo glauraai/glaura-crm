@@ -1,4 +1,5 @@
 import type { SalonStatus } from "@/generated/prisma/enums";
+import { isManagerOrAdmin } from "@/lib/roles";
 
 /**
  * PURE authorization predicate for onboarded-account credentials.
@@ -44,7 +45,7 @@ export function prepareAccountBlocker(
   user: CredentialViewer,
   salon: { assignedToId: string | null; status: SalonStatus },
 ): string | null {
-  if (user.role === "ADMIN") return null;
+  if (isManagerOrAdmin(user)) return null;
   if (!user.id || salon.assignedToId !== user.id) return "Réservé au commercial assigné ou à un admin";
   if (salon.status === "PAS_INTERESSE") return "Indisponible pour un salon Pas intéressé";
   return null;
