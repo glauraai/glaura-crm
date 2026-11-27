@@ -208,7 +208,7 @@ export async function AvailabilityPanel({
               ? "Synchronisation bidirectionnelle Google Agenda + RDV CRM avec fiches salons et liens Google Meet."
               : calConfigured && needsEventsScope
                 ? "Créneaux Google Agenda (libre/occupé) + RDV planifiés dans le CRM."
-                : "RDV planifiés dans le CRM (connectez Google Agenda via GOOGLE_CALENDAR_SA_KEY pour la synchro bidirectionnelle)."}
+                : "RDV planifiés dans le CRM — connectez Google Agenda pour la synchronisation bidirectionnelle."}
           </p>
         </div>
 

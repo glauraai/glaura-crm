@@ -39,6 +39,7 @@ export function ActivityLogForm({
   const hasEmail = Boolean(salon.contactEmail?.trim());
 
   function handleTypeChange(next: ActivityType) {
+    const wasCalendar = type === "VISIO" || type === "VISITE";
     setType(next);
     if (next === "VISIO") {
       setSyncCalendar(true);
@@ -48,6 +49,8 @@ export function ActivityLogForm({
       setSyncCalendar(true);
       setInviteSalon(false);
       if (!scheduledTime) setScheduledTime("10:00");
+    } else if (wasCalendar && scheduledTime === "10:00") {
+      setScheduledTime("");
     }
   }
 
