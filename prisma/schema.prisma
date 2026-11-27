@@ -242,6 +242,8 @@ model User {
   resolvedDisputes        CommissionDispute[]  @relation("DisputeResolver")
   salesGoals              SalesGoal[]
   sentInstagramMessages   InstagramMessage[]   @relation("InstagramSender")
+  callEvaluations         CallEvaluation[]
+  objectionRecords        ObjectionRecord[]
 }
 
 model Salon {
@@ -295,6 +297,16 @@ model Salon {
   siret                String?
   portfolioClaimedAt   DateTime?
   portfolioClaimedById String?
+  inactivityWarnedAt   DateTime?
+
+  // GTM 1 bis automated scoring & SCOUT prep brief
+  gtmScore             Int?
+  gtmPriority          String? // A | B | C | CHAINE | HORS_CIBLE | EXCLU
+  gtmAngle             String?
+  gtmScoreBreakdown    Json?
+  gtmScoredAt          DateTime?
+  prepBriefJson        Json?
+  prepBriefUpdatedAt   DateTime?
 
   // Duplicate handling. Salons are never deleted: a duplicate is archived and
   // points at the record it was merged into, so the merge can be undone and the
@@ -309,18 +321,21 @@ model Salon {
   updatedAt DateTime @updatedAt
 
   instagramConversations InstagramConversation[]
-  tasks          SalesTask[]
-  activities     Activity[]
-  reminders      Reminder[]
-  onboardingJobs OnboardingJob[]
-  emailJobs      EmailJob[]
-  prospect       Prospect?       @relation("ProspectConversion")
-  contacts       Contact[]
-  opportunities  Opportunity[]
-  suggestions    AgentSuggestion[]
-  transcripts    TranscriptRecord[]
-  subscriptions  SubscriptionLine[]
-  syncedInvoices SyncedInvoice[]
+  tasks            SalesTask[]
+  activities       Activity[]
+  reminders        Reminder[]
+  onboardingJobs   OnboardingJob[]
+  emailJobs        EmailJob[]
+  prospect         Prospect?         @relation("ProspectConversion")
+  contacts         Contact[]
+  opportunities    Opportunity[]
+  suggestions      AgentSuggestion[]
+  transcripts      TranscriptRecord[]
+  subscriptions    SubscriptionLine[]
+  syncedInvoices   SyncedInvoice[]
+  socialSnapshots  SocialSnapshot[]
+  callEvaluations  CallEvaluation[]
+  objectionRecords ObjectionRecord[]
 
   @@index([status])
   @@index([metier])
@@ -330,6 +345,7 @@ model Salon {
   @@index([nextActionAt])
   @@index([airtableBaseId])
   @@index([archivedAt])
+  @@index([gtmPriority, gtmScore])
 }
 
 // A salon discovered on a public booking directory (Planity/Treatwell/Booksy/Fresha).
@@ -403,8 +419,19 @@ model Prospect {
 
   assignedToId String?
   assignedTo   User?       @relation("ProspectOwner", fields: [assignedToId], references: [id], onDelete: SetNull)
-  claimedAt    DateTime? // timestamp of rep portfolio self-claim (enforces 120/mo cap)
+  claimedAt    DateTime? // timestamp of rep portfolio self-claim
   tasks        SalesTask[]
+
+  // GTM 1 bis 100-pt scoring & C-tier B2B nurture tracking
+  gtmScore          Int?
+  gtmPriority       String? // A | B | C | CHAINE | HORS_CIBLE | EXCLU
+  gtmAngle          String?
+  gtmScoreBreakdown Json?
+  gtmScoredAt       DateTime?
+  nurtureStep       Int       @default(0)
+  nurtureNextAt     DateTime?
+  nurtureStoppedAt  DateTime?
+  socialSnapshots   SocialSnapshot[]
 
   tourneeId String?
   tournee   Tournee? @relation(fields: [tourneeId], references: [id], onDelete: SetNull)
@@ -424,6 +451,7 @@ model Prospect {
   @@index([aiScore])
   @@index([aiSpecialty])
   @@index([siren])
+  @@index([gtmPriority, gtmScore])
 }
 
 // A daily prospecting round: 20-30 prospects in one zone, assigned to a commercial.
@@ -815,6 +843,8 @@ model Opportunity {
   lossReason        String?
   atRisk            Boolean          @default(false)
   riskReason        String?
+  riskFlaggedAt     DateTime?
+  riskHandledStatus String? // OPEN | RELANCE_PROPOSED | RESOLVED
   ownerId           String?
   owner             User?            @relation("OpportunityOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   ownerLockedAt     DateTime? // locked when stage reaches SIGNE
@@ -823,17 +853,20 @@ model Opportunity {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
-  transitions   StageTransition[]
-  ownershipLogs OwnershipAuditLog[]
-  activities    Activity[]
-  suggestions   AgentSuggestion[]
-  transcripts   TranscriptRecord[]
-  subscriptions SubscriptionLine[]
-  commission    Commission?
+  transitions      StageTransition[]
+  ownershipLogs    OwnershipAuditLog[]
+  activities       Activity[]
+  suggestions      AgentSuggestion[]
+  transcripts      TranscriptRecord[]
+  subscriptions    SubscriptionLine[]
+  commission       Commission?
+  callEvaluations  CallEvaluation[]
+  objectionRecords ObjectionRecord[]
 
   @@index([salonId])
   @@index([ownerId, stage])
   @@index([stage, updatedAt])
+  @@index([atRisk, stage])
 }
 
 model StageTransition {
@@ -916,12 +949,17 @@ model TranscriptRecord {
   isDecisionMakerCall Boolean?
   matchStatus         TranscriptMatchStatus @default(UNMATCHED)
   echoProcessedAt     DateTime?
+  mentorProcessedAt   DateTime?
   purgedAt            DateTime?
   createdAt           DateTime              @default(now())
+
+  callEvaluation   CallEvaluation?
+  objectionRecords ObjectionRecord[]
 
   @@index([matchStatus, createdAt])
   @@index([salonId, occurredAt])
   @@index([echoProcessedAt, matchStatus])
+  @@index([mentorProcessedAt, matchStatus])
 }
 
 // Line-item subscription / quote configuration & Stripe checkout payment link.
@@ -1065,4 +1103,81 @@ model RoundRobinState {
   id             String   @id @default("default")
   lastAssignedId String?
   updatedAt      DateTime @updatedAt
+}
+
+// ── Phase 3 & 4 Models: Social Snapshots, MENTOR Call Scoring, Objections & Automation Config ──
+
+model SocialSnapshot {
+  id              String    @id @default(cuid())
+  salonId         String?
+  salon           Salon?    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  prospectId      String?
+  prospect        Prospect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  monthKey        String // YYYY-MM
+  igFollowers     Int?
+  igPosts         Int?
+  igAvgReelViews  Int?
+  tiktokFollowers Int?
+  googleReviews   Int?
+  googleRating    Float?
+  capturedAt      DateTime  @default(now())
+
+  @@unique([salonId, monthKey])
+  @@unique([prospectId, monthKey])
+  @@index([monthKey])
+}
+
+model CallEvaluation {
+  id             String           @id @default(cuid())
+  transcriptId   String           @unique
+  transcript     TranscriptRecord @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+  salonId        String?
+  salon          Salon?           @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  opportunityId  String?
+  opportunity    Opportunity?     @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  userId         String?
+  user           User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  overallScore   Int // 0..100
+  stepScoresJson Json // 8-step Fodé rubric breakdown
+  strengths      String[]         @default([])
+  improvements   String[]         @default([])
+  closingLevers  String[]         @default([])
+  salesAngleUsed String?
+  createdAt      DateTime         @default(now())
+
+  @@index([salonId, createdAt])
+  @@index([userId, createdAt])
+  @@index([opportunityId])
+}
+
+model ObjectionRecord {
+  id            String            @id @default(cuid())
+  transcriptId  String?
+  transcript    TranscriptRecord? @relation(fields: [transcriptId], references: [id], onDelete: SetNull)
+  salonId       String?
+  salon         Salon?            @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  opportunityId String?
+  opportunity   Opportunity?      @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  userId        String?
+  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  category      String
+  verbatim      String            @db.Text
+  responseGiven String?           @db.Text
+  succeeded     Boolean?
+  createdAt     DateTime          @default(now())
+
+  @@index([category, createdAt])
+  @@index([salonId, createdAt])
+  @@index([opportunityId])
+}
+
+// Singleton ("default") for CRM-wide GTM / agent automation toggles.
+model CrmAutomationConfig {
+  id                    String   @id @default("default")
+  cTierNurtureEnabled   Boolean  @default(false) // OFF by default until B2B legal copy validated
+  decemberPauseEnabled  Boolean  @default(true)
+  inactivityWarningDays Int      @default(75)
+  inactivityReleaseDays Int      @default(90)
+  updatedById           String?
+  updatedAt             DateTime @updatedAt
 }

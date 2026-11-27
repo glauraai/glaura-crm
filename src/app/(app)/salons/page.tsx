@@ -4,6 +4,7 @@ import { isAdmin, isManagerOrAdmin, requireMember } from "@/lib/access";
 import { STATUS_LABEL } from "@/lib/labels";
 import { frenchDate } from "@/lib/crm-format";
 import { getSalonCount, getSalonOwners, getSalons } from "@/lib/salons";
+import { gtmPriorityBadgeStyle } from "@/lib/gtm/scoring";
 import { SalonCard } from "@/components/SalonCard";
 import { DeleteLeadButton } from "@/components/DeleteLeadButton";
 import { PipelineFilters } from "@/components/PipelineFilters";
@@ -17,8 +18,9 @@ export default async function SalonsPage({
   const viewer = await requireMember();
   const canManage = isManagerOrAdmin(viewer);
   const canDelete = isAdmin(viewer);
-  const filterParams = canManage ? sp : { ...sp, owner: undefined };
-  const [salons, owners, total] = await Promise.all([getSalons(filterParams, viewer), canManage ? getSalonOwners() : Promise.resolve([]), getSalonCount(filterParams, viewer)]);
+  const isReadOnlyBrowse = !canManage && sp.scope === "all";
+  const filterParams = canManage ? sp : { ...sp, owner: isReadOnlyBrowse ? sp.owner : undefined };
+  const [salons, owners, total] = await Promise.all([getSalons(filterParams, viewer), canManage || isReadOnlyBrowse ? getSalonOwners() : Promise.resolve([]), getSalonCount(filterParams, viewer)]);
   const page = Math.max(1, Math.min(100000, Number.parseInt(sp.page ?? "", 10) || 1));
   const href = (updates: Record<string, string>) => { const qs = new URLSearchParams(); for (const [key, value] of Object.entries(sp)) if (value) qs.set(key, value); for (const [key, value] of Object.entries(updates)) qs.set(key, value); return `/salons?${qs}`; };
 
@@ -48,13 +50,34 @@ export default async function SalonsPage({
         </form>
       </div>
 
-      <div className="mb-4 flex gap-3 text-sm"><Link href={href({ view: "table", page: "1" })} className="rounded-lg border border-slate-200 bg-white px-3 py-2">Vue tableau</Link><Link href={href({ view: "cards", page: "1" })} className="rounded-lg border border-slate-200 bg-white px-3 py-2">Vue fiches</Link></div>
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+        {!canManage && (
+          <div className="flex gap-1.5 rounded-lg bg-slate-100 p-1">
+            <Link href={href({ scope: "", page: "1" })} className={`rounded-md px-3 py-1 font-medium ${!isReadOnlyBrowse ? "bg-white text-slate-950 shadow-xs" : "text-slate-600"}`}>
+              Mon portefeuille
+            </Link>
+            <Link href={href({ scope: "all", page: "1" })} className={`rounded-md px-3 py-1 font-medium ${isReadOnlyBrowse ? "bg-white text-slate-950 shadow-xs" : "text-slate-600"}`}>
+              Équipe (lecture seule)
+            </Link>
+          </div>
+        )}
+        <Link href={href({ view: "table", page: "1" })} className="rounded-lg border border-slate-200 bg-white px-3 py-2">Vue tableau</Link>
+        <Link href={href({ view: "cards", page: "1" })} className="rounded-lg border border-slate-200 bg-white px-3 py-2">Vue fiches</Link>
+      </div>
+      {isReadOnlyBrowse && (
+        <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
+          Mode lecture seule : vous pouvez consulter les fiches et transcriptions de vos collègues pour vous inspirer, sans modifier leurs comptes.
+        </p>
+      )}
       {salons.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-400">
           Aucun salon ne correspond à ces filtres.
         </div>
       ) : sp.view !== "cards" ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{["Salon", "Provenance", "Statut", "Responsable", "Contact", "Prochaine action", ""].map((title, i) => <th key={i} className="p-4 font-medium">{title}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{salons.map(s => <tr key={s.id} className="hover:bg-slate-50"><td className="p-4"><Link href={`/salons/${s.id}`} className="font-semibold text-slate-900 hover:text-rose-700">{s.name}</Link><p className="mt-1 text-xs text-slate-500">{s.address ?? s.arrondissement}</p></td><td className="p-4"><LeadProvenance lead={s} /></td><td className="p-4">{STATUS_LABEL[s.status]}</td><td className="p-4">{s.assignedTo?.name ?? s.assignedTo?.email ?? "Non attribué"}</td><td className="p-4"><p>{s.phone ?? s.contactEmail ?? "À compléter"}</p>{s.instagram && <a href={`https://www.instagram.com/${s.instagram}`} target="_blank" rel="noreferrer" className="text-xs text-violet-700">@{s.instagram}</a>}</td><td className="p-4">{s.tasks[0] ? <><p>{s.tasks[0].title}</p><p className="mt-1 text-xs text-slate-500">{frenchDate(s.tasks[0].dueAt)}</p></> : s.nextActionAt ? frenchDate(s.nextActionAt) : "À planifier"}</td><td className="p-4"><div className="flex items-center gap-2"><Link href={`/taches?salon=${s.id}`} className="whitespace-nowrap text-rose-700">Créer une tâche →</Link>{canDelete && <DeleteLeadButton salonId={s.id} salonName={s.name} />}</div></td></tr>)}</tbody></table></div>
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{["Salon", "GTM", "Provenance", "Statut", "Responsable", "Contact", "Prochaine action", ""].map((title, i) => <th key={i} className="p-4 font-medium">{title}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{salons.map(s => {
+          const isPeerReadOnly = !canManage && s.assignedToId !== viewer.id;
+          return <tr key={s.id} className="hover:bg-slate-50"><td className="p-4"><Link href={`/salons/${s.id}`} className="font-semibold text-slate-900 hover:text-rose-700">{s.name}</Link>{isPeerReadOnly && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">Lecture seule</span>}<p className="mt-1 text-xs text-slate-500">{s.address ?? s.arrondissement}</p></td><td className="p-4">{s.gtmPriority ? <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${gtmPriorityBadgeStyle(s.gtmPriority)}`}>{s.gtmPriority}{s.gtmScore != null ? ` · ${s.gtmScore}` : ""}</span> : <span className="text-xs text-slate-400">—</span>}</td><td className="p-4"><LeadProvenance lead={s} /></td><td className="p-4">{STATUS_LABEL[s.status]}</td><td className="p-4">{s.assignedTo?.name ?? s.assignedTo?.email ?? "Non attribué"}</td><td className="p-4"><p>{s.phone ?? s.contactEmail ?? "À compléter"}</p>{s.instagram && <a href={`https://www.instagram.com/${s.instagram}`} target="_blank" rel="noreferrer" className="text-xs text-violet-700">@{s.instagram}</a>}</td><td className="p-4">{s.tasks[0] ? <><p>{s.tasks[0].title}</p><p className="mt-1 text-xs text-slate-500">{frenchDate(s.tasks[0].dueAt)}</p></> : s.nextActionAt ? frenchDate(s.nextActionAt) : "À planifier"}</td><td className="p-4"><div className="flex items-center gap-2">{!isPeerReadOnly ? <Link href={`/taches?salon=${s.id}`} className="whitespace-nowrap text-rose-700">Créer une tâche →</Link> : <Link href={`/salons/${s.id}`} className="whitespace-nowrap text-slate-600 hover:text-slate-900">Consulter →</Link>}{canDelete && <DeleteLeadButton salonId={s.id} salonName={s.name} />}</div></td></tr>;
+        })}</tbody></table></div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {salons.map((s) => (

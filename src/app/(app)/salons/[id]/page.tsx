@@ -11,9 +11,13 @@ import { EmailFollowUpForm } from "@/components/EmailFollowUpForm";
 import { parisDay } from "@/lib/availability";
 import { OnboardingPasswordReveal } from "@/components/OnboardingPasswordReveal";
 import { SalonEditModal } from "@/components/SalonEditModal";
-import { getSalon, getAssignableUsers } from "@/lib/salons";
+import { canEditSalon, getSalon, getAssignableUsers } from "@/lib/salons";
 import { prisma } from "@/lib/db";
 import { addReminder, approveProIdentityAndRetry, changeStatus, completeReminder, logActivity, queueFollowUpEmail, setDailyPriority, triggerOnboarding, updateSalon } from "@/lib/actions";
+import { addContact, createOpportunity, moveOpportunityStage, releaseSalonToPool } from "@/lib/pipeline/actions";
+import { triggerCraftProposal, triggerScoutBrief } from "@/lib/agents/actions";
+import { computeThreeMonthAudienceGrowth, gtmPriorityBadgeStyle } from "@/lib/gtm/scoring";
+import { SubmitButton } from "@/components/SubmitButton";
 import { isDailyPriorityActive } from "@/lib/dailyPriority";
 import { wasRepaired } from "@/lib/onboarding/placeholder";
 import { canRevealOnboardingPassword, prepareAccountBlocker } from "@/lib/onboarding-access";
@@ -34,7 +38,6 @@ import { repSender } from "@/lib/email";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { SalonInstagramPanel } from "@/components/SalonInstagramPanel";
 import { PricingCalculator } from "@/components/PricingCalculator";
-import { addContact, createOpportunity, moveOpportunityStage } from "@/lib/pipeline/actions";
 import { OPPORTUNITY_STAGES, STAGE_META_MAP } from "@/lib/pipeline/stages";
 import { formatEurCents } from "@/lib/pricing/catalog";
 import { canAccessSalonInstagram } from "@/lib/access";
@@ -96,6 +99,23 @@ export default async function SalonDetailPage({
   ]);
   const mySender = repSender(myAccount);
   if (!salon) notFound();
+  const canEdit = canEditSalon(me, salon);
+  const growth = computeThreeMonthAudienceGrowth(salon.socialSnapshots);
+  const prepBrief = (salon.prepBriefJson ?? null) as {
+    salonSummary?: string;
+    historyRecap?: string;
+    recommendedAngle?: string;
+    probableObjections?: string[];
+    discoveryQuestions?: string[];
+    demoAccountReady?: boolean;
+    demoReminder?: string;
+    growthTalkingPoint?: string | null;
+  } | null;
+  const gtmBreakdown = (salon.gtmScoreBreakdown ?? null) as {
+    igUnverified?: boolean;
+    filterReason?: string | null;
+    criteria?: Array<{ key: string; label: string; points: number; maxPoints: number; detail: string }>;
+  } | null;
 
   const priorityActive = isDailyPriorityActive(salon.priorityDate);
   const hasBookingUrl = !!salon.bookingUrl;
@@ -146,29 +166,63 @@ export default async function SalonDetailPage({
   return (
     <div className="mx-auto max-w-5xl p-6">
       {onboardingBusy && <AutoRefresh intervalMs={5000} />}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <Link href="/salons" className="text-sm text-slate-500 hover:text-slate-700">← Salons</Link>
-        <div className="flex items-center gap-2">
-          <form action={setDailyPriority.bind(null, id)}>
-            <button
-              type="submit"
-              title={priorityActive ? "Retirer la priorité du jour" : "Marquer comme priorité du jour"}
-              className={cn(
-                "rounded-lg border px-3 py-1.5 text-sm font-medium transition",
-                priorityActive
-                  ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-              )}
-            >
-              {priorityActive ? "★ Priorité du jour" : "☆ Priorité du jour"}
-            </button>
-          </form>
-          <Link href={`/salons/${id}/edit`} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
-            Modifier
-          </Link>
-          <ArchiveSalonButton salonId={id} salonName={salon.name} archived={Boolean(salon.archivedAt)} />
-        </div>
+        {canEdit && (
+          <div className="flex flex-wrap items-center gap-2">
+            <form action={triggerScoutBrief}>
+              <input type="hidden" name="salonId" value={id} />
+              <SubmitButton className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 hover:bg-violet-100">
+                Brief SCOUT
+              </SubmitButton>
+            </form>
+            <form action={triggerCraftProposal}>
+              <input type="hidden" name="salonId" value={id} />
+              <SubmitButton className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-800 hover:bg-cyan-100">
+                Proposition CRAFT
+              </SubmitButton>
+            </form>
+            {salon.assignedToId && salon.status !== "SIGNE" && (
+              <form action={releaseSalonToPool}>
+                <input type="hidden" name="salonId" value={id} />
+                <input type="hidden" name="returnTo" value="/salons" />
+                <SubmitButton className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100">
+                  Rendre au pool commun
+                </SubmitButton>
+              </form>
+            )}
+            <form action={setDailyPriority.bind(null, id)}>
+              <button
+                type="submit"
+                title={priorityActive ? "Retirer la priorité du jour" : "Marquer comme priorité du jour"}
+                className={cn(
+                  "rounded-lg border px-3 py-1.5 text-sm font-medium transition",
+                  priorityActive
+                    ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                {priorityActive ? "★ Priorité du jour" : "☆ Priorité du jour"}
+              </button>
+            </form>
+            <Link href={`/salons/${id}/edit`} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
+              Modifier
+            </Link>
+            <ArchiveSalonButton salonId={id} salonName={salon.name} archived={Boolean(salon.archivedAt)} />
+          </div>
+        )}
       </div>
+
+      {!canEdit && (
+        <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>Consultation en lecture seule</strong> — compte attribué à {salon.assignedTo?.name ?? salon.assignedTo?.email ?? "un autre commercial"}. Vous pouvez consulter l’historique, les transcriptions et le coaching MENTOR pour vous inspirer, sans modifier cette fiche.
+        </p>
+      )}
+      {sp.scoutNotice && (
+        <p className="mb-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
+          {sp.scoutNotice}
+        </p>
+      )}
 
       {salon.archivedAt && (
         <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -182,7 +236,7 @@ export default async function SalonDetailPage({
         )}
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">{salon.name}</h1>
-          <Link href={`/taches?salon=${salon.id}`} className="mt-2 inline-block text-sm font-medium text-rose-700">+ Créer une tâche</Link>{salon.prospect && <div className="mt-2 flex flex-wrap gap-3 text-sm">{salon.prospect.treatwellUrl && <a href={salon.prospect.treatwellUrl} target="_blank" rel="noreferrer" className="text-rose-700">Fiche Treatwell ↗</a>}{salon.prospect.planityUrl && <a href={salon.prospect.planityUrl} target="_blank" rel="noreferrer" className="text-sky-700">Fiche Planity ↗</a>}</div>}
+          {canEdit && <Link href={`/taches?salon=${salon.id}`} className="mt-2 inline-block text-sm font-medium text-rose-700">+ Créer une tâche</Link>}{salon.prospect && <div className="mt-2 flex flex-wrap gap-3 text-sm">{salon.prospect.treatwellUrl && <a href={salon.prospect.treatwellUrl} target="_blank" rel="noreferrer" className="text-rose-700">Fiche Treatwell ↗</a>}{salon.prospect.planityUrl && <a href={salon.prospect.planityUrl} target="_blank" rel="noreferrer" className="text-sky-700">Fiche Planity ↗</a>}</div>}
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {salon.metier.map((m) => (
               <span key={m} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{METIER_LABEL[m]}</span>
@@ -195,52 +249,59 @@ export default async function SalonDetailPage({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* Left: info + status + onboarding */}
         <div className="space-y-5">
-          <SalonEditModal action={updateSalon.bind(null, id)} salon={editSalon} isAdmin={canManage} assignableUsers={assignableUsers} priorityActive={priorityActive}>
-            <div className={cn(card, "cursor-pointer transition hover:border-rose-300 hover:shadow-md")}>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-slate-900">Informations</h2>
-                <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">Modifier</span>
+          {(() => {
+            const infoCard = (
+              <div className={cn(card, canEdit && "cursor-pointer transition hover:border-rose-300 hover:shadow-md")}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold text-slate-900">Informations</h2>
+                  {canEdit && <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">Modifier</span>}
+                </div>
+                <dl className="space-y-2 text-sm">
+                  <Row label="Adresse" value={salon.address} />
+                  <Row label="Arrondissement" value={salon.arrondissement} />
+                  <Row label="Contact" value={salon.contactName} />
+                  <Row label="Email" value={salon.contactEmail} />
+                  <Row label="Téléphone" value={salon.phone} />
+                  <Row
+                    label="Instagram"
+                    value={
+                      salon.instagram ? (
+                        <a
+                          href={`https://www.instagram.com/${salon.instagram}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-rose-600 hover:text-rose-700"
+                        >
+                          @{salon.instagram}
+                        </a>
+                      ) : null
+                    }
+                  />
+                  <Row label="Réservation" value={salon.bookingTool !== "NONE" ? BOOKING_LABEL[salon.bookingTool] : null} />
+                  <Row label="Note" value={salon.rating ? `${salon.rating}/5` : null} />
+                  <Row label="Assigné à" value={salon.assignedTo?.name ?? salon.assignedTo?.email ?? null} />
+                  <Row label="Priorité" value={salon.priorityLabel} />
+                  <Row label="Lead" value={salon.leadTemperature ? LEAD_TEMPERATURE_LABEL[salon.leadTemperature] ?? salon.leadTemperature : null} />
+                  <Row label="Provenance" value={<LeadProvenance lead={salon} />} />
+                  <Row label="Compte" value={salon.accountStatusLabel} />
+                  <Row label="Signature" value={formatDate(salon.signedAt)} />
+                  <Row label="Activation" value={formatDate(salon.activatedAt)} />
+                  <Row label="RDV" value={formatDate(salon.appointmentAt)} />
+                  <Row label="Clients importés" value={salon.clientBaseImported ? `${salon.importedClientCount ?? 0}` : null} />
+                </dl>
+                {salon.airtableRecordUrl && (
+                  <Link href={salon.airtableRecordUrl} className="mt-4 inline-flex text-sm font-medium text-rose-600 hover:text-rose-700">
+                    Ouvrir dans Airtable →
+                  </Link>
+                )}
               </div>
-              <dl className="space-y-2 text-sm">
-                <Row label="Adresse" value={salon.address} />
-                <Row label="Arrondissement" value={salon.arrondissement} />
-                <Row label="Contact" value={salon.contactName} />
-                <Row label="Email" value={salon.contactEmail} />
-                <Row label="Téléphone" value={salon.phone} />
-                <Row
-                  label="Instagram"
-                  value={
-                    salon.instagram ? (
-                      <a
-                        href={`https://www.instagram.com/${salon.instagram}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-rose-600 hover:text-rose-700"
-                      >
-                        @{salon.instagram}
-                      </a>
-                    ) : null
-                  }
-                />
-                <Row label="Réservation" value={salon.bookingTool !== "NONE" ? BOOKING_LABEL[salon.bookingTool] : null} />
-                <Row label="Note" value={salon.rating ? `${salon.rating}/5` : null} />
-                <Row label="Assigné à" value={salon.assignedTo?.name ?? salon.assignedTo?.email ?? null} />
-                <Row label="Priorité" value={salon.priorityLabel} />
-                <Row label="Lead" value={salon.leadTemperature ? LEAD_TEMPERATURE_LABEL[salon.leadTemperature] ?? salon.leadTemperature : null} />
-                <Row label="Provenance" value={<LeadProvenance lead={salon} />} />
-                <Row label="Compte" value={salon.accountStatusLabel} />
-                <Row label="Signature" value={formatDate(salon.signedAt)} />
-                <Row label="Activation" value={formatDate(salon.activatedAt)} />
-                <Row label="RDV" value={formatDate(salon.appointmentAt)} />
-                <Row label="Clients importés" value={salon.clientBaseImported ? `${salon.importedClientCount ?? 0}` : null} />
-              </dl>
-              {salon.airtableRecordUrl && (
-                <Link href={salon.airtableRecordUrl} className="mt-4 inline-flex text-sm font-medium text-rose-600 hover:text-rose-700">
-                  Ouvrir dans Airtable →
-                </Link>
-              )}
-            </div>
-          </SalonEditModal>
+            );
+            return canEdit ? (
+              <SalonEditModal action={updateSalon.bind(null, id)} salon={editSalon} isAdmin={canManage} assignableUsers={assignableUsers} priorityActive={priorityActive}>
+                {infoCard}
+              </SalonEditModal>
+            ) : infoCard;
+          })()}
 
           {(salon.notes || salon.objection) && (
             <div className={card}>
@@ -255,17 +316,51 @@ export default async function SalonDetailPage({
             </div>
           )}
 
-          <div className={card}>
-            <h2 className="mb-3 text-base font-semibold text-slate-950">Statut</h2>
-            <form action={changeStatus.bind(null, id)} className="flex gap-2">
-              <select name="status" defaultValue={salon.status} className={field}>
-                {STATUS_ORDER.map((s) => (
-                  <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-                ))}
-              </select>
-              <button className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">OK</button>
-            </form>
-          </div>
+          {canEdit && (
+            <div className={card}>
+              <h2 className="mb-3 text-base font-semibold text-slate-950">Statut</h2>
+              <form action={changeStatus.bind(null, id)} className="flex gap-2">
+                <select name="status" defaultValue={salon.status} className={field}>
+                  {STATUS_ORDER.map((s) => (
+                    <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+                  ))}
+                </select>
+                <button className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">OK</button>
+              </form>
+            </div>
+          )}
+
+          {/* GTM 1 bis Score & Angle Card */}
+          {(salon.gtmPriority || growth.growthPct != null) && (
+            <div className={card}>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">Scoring GTM 1 bis</h2>
+                {salon.gtmPriority && (
+                  <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-bold", gtmPriorityBadgeStyle(salon.gtmPriority))}>
+                    Priorité {salon.gtmPriority}{salon.gtmScore != null ? ` · ${salon.gtmScore}/100` : ""}
+                  </span>
+                )}
+              </div>
+              {salon.gtmAngle && <p className="text-xs font-medium text-violet-700">Angle conseillé : {salon.gtmAngle}</p>}
+              {gtmBreakdown?.igUnverified && <p className="mt-1 text-xs text-amber-700">Instagram non vérifié (non exclu).</p>}
+              {gtmBreakdown?.filterReason && <p className="mt-1 text-xs text-slate-600">{gtmBreakdown.filterReason}</p>}
+              {growth.growthPct != null && (
+                <p className="mt-2 rounded-lg bg-violet-50 p-2 text-xs text-violet-900">
+                  Croissance audience 3 mois : <strong>{growth.growthPct > 0 ? `+${growth.growthPct}%` : `${growth.growthPct}%`}</strong>
+                </p>
+              )}
+              {gtmBreakdown?.criteria && gtmBreakdown.criteria.length > 0 && (
+                <ul className="mt-3 space-y-1 text-xs text-slate-600">
+                  {gtmBreakdown.criteria.filter((c) => c.points > 0).map((c) => (
+                    <li key={c.key} className="flex justify-between gap-2">
+                      <span>{c.label} ({c.detail})</span>
+                      <span className="font-semibold text-slate-900">+{c.points}/{c.maxPoints}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className={card}>
             <h2 className="mb-1 text-base font-semibold text-slate-950">Préparer le compte</h2>
@@ -344,19 +439,54 @@ export default async function SalonDetailPage({
 
         {/* Middle: activity */}
         <div className="space-y-5 lg:col-span-1">
-          <div className={card}>
-            <h2 className="mb-3 text-sm font-semibold text-slate-900">Nouvelle activité</h2>
-            {sp.activityNotice && (
-              <p className="mb-2.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-2 text-xs text-indigo-900">
-                {sp.activityNotice}
-              </p>
-            )}
-            <ActivityLogForm
-              action={logActivity.bind(null, id)}
-              salon={{ name: salon.name, address: salon.address, contactEmail: salon.contactEmail }}
-              defaultDate={parisDay(new Date())}
-            />
-          </div>
+          {canEdit && (
+            <div className={card}>
+              <h2 className="mb-3 text-sm font-semibold text-slate-900">Nouvelle activité</h2>
+              {sp.activityNotice && (
+                <p className="mb-2.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-2 text-xs text-indigo-900">
+                  {sp.activityNotice}
+                </p>
+              )}
+              <ActivityLogForm
+                action={logActivity.bind(null, id)}
+                salon={{ name: salon.name, address: salon.address, contactEmail: salon.contactEmail }}
+                defaultDate={parisDay(new Date())}
+              />
+            </div>
+          )}
+
+          {prepBrief && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-5 shadow-sm space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-violet-950">Fiche préparation SCOUT</h2>
+                {salon.prepBriefUpdatedAt && <span className="text-violet-600">{frenchDate(salon.prepBriefUpdatedAt)}</span>}
+              </div>
+              {prepBrief.recommendedAngle && <p><strong>Angle conseillé :</strong> {prepBrief.recommendedAngle}</p>}
+              {prepBrief.salonSummary && <p className="text-slate-700">{prepBrief.salonSummary}</p>}
+              {prepBrief.demoReminder && (
+                <p className={cn("rounded-lg p-2 font-medium", prepBrief.demoAccountReady ? "bg-emerald-50 text-emerald-800" : "bg-amber-100 text-amber-900")}>
+                  {prepBrief.demoReminder}
+                </p>
+              )}
+              {prepBrief.growthTalkingPoint && <p className="text-violet-800 font-medium">{prepBrief.growthTalkingPoint}</p>}
+              {prepBrief.discoveryQuestions?.length ? (
+                <div>
+                  <p className="font-semibold text-slate-800">Questions de découverte</p>
+                  <ul className="mt-1 list-disc pl-4 space-y-0.5 text-slate-700">
+                    {prepBrief.discoveryQuestions.map((q, i) => <li key={i}>{q}</li>)}
+                  </ul>
+                </div>
+              ) : null}
+              {prepBrief.probableObjections?.length ? (
+                <div>
+                  <p className="font-semibold text-slate-800">Objections probables</p>
+                  <ul className="mt-1 list-disc pl-4 space-y-0.5 text-slate-700">
+                    {prepBrief.probableObjections.map((o, i) => <li key={i}>{o}</li>)}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          )}
 
           <div className={card}>
             <h2 className="mb-3 text-sm font-semibold text-slate-900">Historique</h2>
@@ -401,6 +531,7 @@ export default async function SalonDetailPage({
 
         {/* Right: reminders */}
         <div className="space-y-5">
+          {canEdit && (
           <div className={card}>
             <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
               <div>
@@ -441,14 +572,17 @@ export default async function SalonDetailPage({
               </ul>
             )}
           </div>
+          )}
 
           <div className={card}>
             <h2 className="mb-3 text-sm font-semibold text-slate-900">Rappel / Relance</h2>
-            <form action={addReminder.bind(null, id)} className="space-y-2">
-              <input name="title" className={field} placeholder="Relancer pour la démo…" required />
-              <input name="dueAt" type="datetime-local" className={field} required />
-              <button className="w-full rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Ajouter</button>
-            </form>
+            {canEdit && (
+              <form action={addReminder.bind(null, id)} className="space-y-2">
+                <input name="title" className={field} placeholder="Relancer pour la démo…" required />
+                <input name="dueAt" type="datetime-local" className={field} required />
+                <button className="w-full rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">Ajouter</button>
+              </form>
+            )}
             <ul className="mt-4 space-y-2">
               {salon.reminders.map((r) => (
                 <li key={r.id} className={cn("flex items-center justify-between rounded-lg p-2 text-sm", (r.done || r.archivedAt) ? "bg-slate-50 text-slate-400 line-through" : "bg-amber-50")}>
@@ -456,7 +590,7 @@ export default async function SalonDetailPage({
                     <div className={cn(!r.done && !r.archivedAt && "font-medium text-slate-700")}>{r.title}</div>
                     <div className="text-xs text-slate-400">{frenchDate(r.dueAt, true)}{r.archivedAt ? " · Archivé" : ""}</div>
                   </div>
-                  {!r.done && !r.archivedAt && (
+                  {canEdit && !r.done && !r.archivedAt && (
                     <form action={completeReminder.bind(null, r.id, id)}>
                       <button className="rounded-md px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50">✓</button>
                     </form>
@@ -490,65 +624,132 @@ export default async function SalonDetailPage({
                     {opp.monthlyAmountEur ? `${opp.monthlyAmountEur} € HT/mois` : "MRR non défini"} · {opp.owner?.name ?? opp.owner?.email ?? "Non attribué"}
                     {opp.ownerLockedAt ? ` · Figé le ${frenchDate(opp.ownerLockedAt)}` : ""}
                   </p>
-                  <form action={moveOpportunityStage} className="mt-2 flex flex-wrap gap-1.5">
-                    <input type="hidden" name="opportunityId" value={opp.id} />
-                    <input type="hidden" name="returnTo" value={`/salons/${salon.id}`} />
-                    <select name="stage" defaultValue={opp.stage} className="h-8 rounded border border-slate-300 bg-white px-2 text-xs">
-                      {OPPORTUNITY_STAGES.map((s) => <option key={s.stage} value={s.stage}>{s.label}</option>)}
-                    </select>
-                    <input name="lossReason" placeholder="Motif si Perdu…" className="h-8 flex-1 rounded border border-slate-300 bg-white px-2 text-xs" />
-                    <button className="rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white">OK</button>
-                  </form>
+                  {canEdit && (
+                    <form action={moveOpportunityStage} className="mt-2 flex flex-wrap gap-1.5">
+                      <input type="hidden" name="opportunityId" value={opp.id} />
+                      <input type="hidden" name="returnTo" value={`/salons/${salon.id}`} />
+                      <select name="stage" defaultValue={opp.stage} className="h-8 rounded border border-slate-300 bg-white px-2 text-xs">
+                        {OPPORTUNITY_STAGES.map((s) => <option key={s.stage} value={s.stage}>{s.label}</option>)}
+                      </select>
+                      <input name="lossReason" placeholder="Motif si Perdu…" className="h-8 flex-1 rounded border border-slate-300 bg-white px-2 text-xs" />
+                      <button className="rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white">OK</button>
+                    </form>
+                  )}
                 </div>
               );
             })}
-            <form action={createOpportunity} className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-              <input type="hidden" name="salonId" value={salon.id} />
-              <input name="title" placeholder="Nouvelle opportunité (ex. Upsell Laura IA)…" required className="h-9 flex-1 rounded-lg border border-slate-300 px-2.5 text-xs" />
-              <input name="monthlyAmountEur" type="number" step="0.01" placeholder="MRR €" className="h-9 w-24 rounded-lg border border-slate-300 px-2.5 text-xs" />
-              <button className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">+ Deal</button>
-            </form>
+            {canEdit && (
+              <form action={createOpportunity} className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                <input type="hidden" name="salonId" value={salon.id} />
+                <input name="title" placeholder="Nouvelle opportunité (ex. Upsell Laura IA)…" required className="h-9 flex-1 rounded-lg border border-slate-300 px-2.5 text-xs" />
+                <input name="monthlyAmountEur" type="number" step="0.01" placeholder="MRR €" className="h-9 w-24 rounded-lg border border-slate-300 px-2.5 text-xs" />
+                <button className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">+ Deal</button>
+              </form>
+            )}
           </div>
         </div>
 
-        {/* Contacts (with decision-maker flag for Allo/ECHO matching) */}
+        {/* Contacts (with decision-maker flag + contact-linked call transcripts per Nov 27 brief p. 10) */}
         <div className={card}>
           <h2 className="mb-3 text-sm font-semibold text-slate-900">Contacts & Décideurs ({salon.contacts.length})</h2>
           <ul className="mb-3 space-y-2 text-xs">
             {salon.contacts.map((c) => (
-              <li key={c.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <div>
-                  <p className="font-semibold text-slate-900">
-                    {c.name} {c.role ? `· ${c.role}` : ""}
-                  </p>
-                  <p className="text-slate-500">{[c.phone, c.email].filter(Boolean).join(" · ") || "—"}</p>
+              <li key={c.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {c.name} {c.role ? `· ${c.role}` : ""}
+                    </p>
+                    <p className="text-slate-500">{[c.phone, c.email].filter(Boolean).join(" · ") || "—"}</p>
+                  </div>
+                  {c.isDecisionMaker && (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">Décideur</span>
+                  )}
                 </div>
-                {c.isDecisionMaker && (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">Décideur</span>
+                {c.transcripts.length > 0 && (
+                  <div className="border-t border-slate-200 pt-1.5 space-y-1">
+                    <p className="text-[11px] font-semibold text-slate-600">Transcriptions liées ({c.transcripts.length})</p>
+                    {c.transcripts.map((t) => (
+                      <div key={t.id} className="rounded bg-white px-2 py-1 text-[11px] text-slate-600">
+                        <span className="font-medium text-slate-800">{t.source} · {frenchDate(t.occurredAt, true)}</span>
+                        {t.durationSec ? ` (${t.durationSec}s)` : ""}
+                        {t.summary ? ` — ${t.summary.slice(0, 120)}` : ""}
+                      </div>
+                    ))}
+                  </div>
                 )}
               </li>
             ))}
             {salon.contacts.length === 0 && <li className="text-slate-400">Aucun contact enregistré.</li>}
           </ul>
-          <form action={addContact} className="grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2">
-            <input type="hidden" name="salonId" value={salon.id} />
-            <input name="name" required placeholder="Nom & prénom" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
-            <input name="role" placeholder="Rôle (Gérante, Manager…)" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
-            <input name="phone" placeholder="Téléphone (Allo)" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
-            <input name="email" type="email" placeholder="Email" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
-            <label className="flex items-center gap-1.5 text-xs text-slate-700">
-              <input type="checkbox" name="isDecisionMaker" /> Décideur / Gérant(e)
-            </label>
-            <button className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white">Ajouter contact</button>
-          </form>
+          {canEdit && (
+            <form action={addContact} className="grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2">
+              <input type="hidden" name="salonId" value={salon.id} />
+              <input name="name" required placeholder="Nom & prénom" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
+              <input name="role" placeholder="Rôle (Gérante, Manager…)" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
+              <input name="phone" placeholder="Téléphone (Allo)" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
+              <input name="email" type="email" placeholder="Email" className="h-9 rounded-lg border border-slate-300 px-2.5 text-xs" />
+              <label className="flex items-center gap-1.5 text-xs text-slate-700">
+                <input type="checkbox" name="isDecisionMaker" /> Décideur / Gérant(e)
+              </label>
+              <button className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white">Ajouter contact</button>
+            </form>
+          )}
+        </div>
+
+        {/* Transcriptions & Coaching MENTOR (visible in read-only mode too per Nov 27 brief pp. 7 & 12) */}
+        <div className={cn(card, "lg:col-span-2")}>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">Transcriptions & Coaching MENTOR ({salon.transcripts.length})</h2>
+            {canEdit && <Link href="/suggestions?tab=transcripts" className="text-xs font-medium text-rose-700 hover:underline">+ Ajouter une transcription →</Link>}
+          </div>
+          {salon.transcripts.length === 0 ? (
+            <p className="text-xs text-slate-400">Aucune transcription d’appel ou de réunion rattachée à ce salon.</p>
+          ) : (
+            <div className="space-y-3">
+              {salon.transcripts.map((t) => (
+                <div key={t.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-900">
+                      {t.source} · {frenchDate(t.occurredAt, true)}
+                      {t.contact ? ` · ${t.contact.name}` : ""}
+                      {t.user?.name ? ` (${t.user.name})` : ""}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {t.isDecisionMakerCall && <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">Décideur</span>}
+                      {t.callEvaluation && (
+                        <span className="rounded-full bg-violet-100 px-2 py-0.5 font-bold text-violet-800">
+                          MENTOR {t.callEvaluation.overallScore}/100
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {t.summary && <p className="text-slate-700">{t.summary}</p>}
+                  {t.rawTranscript && (
+                    <details className="text-slate-600">
+                      <summary className="cursor-pointer font-medium text-slate-700 hover:text-rose-700">Lire la transcription complète</summary>
+                      <p className="mt-1.5 max-h-56 overflow-y-auto whitespace-pre-wrap rounded border border-slate-200 bg-white p-2.5 text-slate-700">{t.rawTranscript}</p>
+                    </details>
+                  )}
+                  {t.callEvaluation && (
+                    <div className="rounded border border-violet-200 bg-white p-2 space-y-1">
+                      {t.callEvaluation.strengths.length > 0 && <p className="text-emerald-800"><strong>Points forts :</strong> {t.callEvaluation.strengths.join(" · ")}</p>}
+                      {t.callEvaluation.improvements.length > 0 && <p className="text-amber-800"><strong>Axes de progrès :</strong> {t.callEvaluation.improvements.join(" · ")}</p>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Rep-scoped Instagram DM Panel */}
-        {me && canAccessSalonInstagram(me, salon) && (
+        {canEdit && me && canAccessSalonInstagram(me, salon) && (
           <SalonInstagramPanel salonId={salon.id} conversations={salon.instagramConversations} error={sp.igError} />
         )}
 
         {/* Pricing & Stripe Payment Link Builder */}
+        {canEdit && (
         <div className={card}>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900">Tarifs & Lien de paiement Stripe</h2>
@@ -572,6 +773,7 @@ export default async function SalonDetailPage({
             </ul>
           )}
         </div>
+        )}
       </div>
 
       {salon.suggestions.length > 0 && (

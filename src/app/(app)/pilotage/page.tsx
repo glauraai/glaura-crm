@@ -12,6 +12,10 @@ import {
 } from "@/lib/pilotage/metrics";
 import { STAGE_META_MAP } from "@/lib/pipeline/stages";
 import { DEFAULT_PLAN_RULES } from "@/lib/commissions/engine";
+import { computeClientSegmentation, computeClosingLevers, computeObjectionStats } from "@/lib/agents/mentor";
+import { triggerSentinelScan } from "@/lib/agents/actions";
+import { gtmPriorityBadgeStyle } from "@/lib/gtm/scoring";
+import { SubmitButton } from "@/components/SubmitButton";
 import { frenchDate } from "@/lib/crm-format";
 import { cn } from "@/lib/utils";
 import type { OpportunityStage } from "@/generated/prisma/enums";
@@ -39,7 +43,7 @@ export default async function PilotagePage({
   const range = resolvePilotageRange({ range: sp.range, from: sp.from, to: sp.to }, now);
   const selectedRepId = admin ? sp.rep || undefined : user.id;
 
-  const [users, activities, transcripts, transitions, quotes, completedTasks, opportunities, goals, invoices] = await Promise.all([
+  const [users, activities, transcripts, transitions, quotes, completedTasks, opportunities, goals, invoices, objections, callEvaluations, playbookSuggestions] = await Promise.all([
     admin ? getAssignableUsers() : prisma.user.findMany({ where: { id: user.id }, select: { id: true, name: true, email: true } }),
     prisma.activity.findMany({
       where: { createdAt: { gte: range.start, lt: range.end }, ...(selectedRepId ? { userId: selectedRepId } : {}) },
@@ -67,8 +71,14 @@ export default async function PilotagePage({
     prisma.opportunity.findMany({
       where: { salon: { archivedAt: null }, ...(selectedRepId ? { ownerId: selectedRepId } : {}) },
       include: {
-        salon: { select: { id: true, name: true, activatedAt: true } },
+        salon: { select: { id: true, name: true, activatedAt: true, gtmPriority: true, gtmScore: true, gtmAngle: true, bookingTool: true } },
         owner: { select: { id: true, name: true, email: true } },
+        suggestions: {
+          where: { agent: "SENTINEL", kind: "RELANCE" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true, status: true, proposedPayload: true },
+        },
       },
       orderBy: { updatedAt: "desc" },
     }),
@@ -78,6 +88,23 @@ export default async function PilotagePage({
     prisma.syncedInvoice.findMany({
       where: { paidAt: { gte: range.start, lt: range.end } },
       select: { salonId: true, amountPaidCents: true, status: true, refunded: true, disputed: true },
+    }),
+    prisma.objectionRecord.findMany({
+      where: { createdAt: { gte: range.start, lt: range.end }, ...(selectedRepId ? { userId: selectedRepId } : {}) },
+      select: { category: true, responseGiven: true, succeeded: true },
+    }),
+    prisma.callEvaluation.findMany({
+      where: { createdAt: { gte: range.start, lt: range.end }, ...(selectedRepId ? { userId: selectedRepId } : {}) },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        opportunity: { select: { stage: true } },
+      },
+    }),
+    prisma.agentSuggestion.findMany({
+      where: { agent: "MENTOR", kind: "PLAYBOOK_UPDATE" },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { id: true, title: true, status: true, proposedPayload: true, createdAt: true },
     }),
   ]);
 
@@ -177,6 +204,47 @@ export default async function PilotagePage({
     .filter((o) => !["ENCAISSE", "PERDU"].includes(o.stage))
     .map((o) => ({ ...o, ageDays: computeDealAgeDays(o.createdAt, now) }))
     .sort((a, b) => b.ageDays - a.ageDays);
+
+  // 5. Deals à risque (SENTINEL)
+  const atRiskDeals = openDeals.filter((o) => o.atRisk);
+
+  // 6. Objections & Playbook (MENTOR)
+  const objectionStats = computeObjectionStats(objections);
+
+  // 7. Leviers de closing & score MENTOR moyen par commercial
+  const closingLevers = computeClosingLevers(
+    callEvaluations
+      .filter((e) => e.opportunity && (["SIGNE", "ABONNE", "COMPTE_ACTIVE", "ENCAISSE"].includes(e.opportunity.stage) || e.opportunity.stage === "PERDU"))
+      .map((e) => ({
+        outcome: e.opportunity!.stage === "PERDU" ? ("LOST" as const) : ("WON" as const),
+        closingLevers: e.closingLevers,
+      })),
+  );
+  const mentorScoresByRep = (selectedRepId ? users.filter((u) => u.id === selectedRepId) : users).map((rep) => {
+    const evals = callEvaluations.filter((e) => e.userId === rep.id);
+    const avg = evals.length > 0 ? Math.round(evals.reduce((s, e) => s + e.overallScore, 0) / evals.length) : null;
+    return { rep, count: evals.length, avgScore: avg };
+  });
+
+  // 8. Segmentation clients (GTM priority & booking tool)
+  const wonStages = new Set(["SIGNE", "ABONNE", "COMPTE_ACTIVE", "ENCAISSE"]);
+  const gtmSegments = computeClientSegmentation(
+    opportunities.map((o) => ({
+      segment: o.salon.gtmPriority ? `Priorité ${o.salon.gtmPriority}` : "Non scoré GTM",
+      won: wonStages.has(o.stage),
+      angle:
+        (o.qualificationJson && typeof o.qualificationJson === "object" && "salesAngle" in o.qualificationJson
+          ? String((o.qualificationJson as Record<string, unknown>).salesAngle ?? "")
+          : null) || o.salon.gtmAngle,
+    })),
+  );
+  const toolSegments = computeClientSegmentation(
+    opportunities.map((o) => ({
+      segment: o.salon.bookingTool,
+      won: wonStages.has(o.stage),
+      angle: o.salon.gtmAngle,
+    })),
+  );
 
   const presetHref = (nextRange: string) => {
     const qs = new URLSearchParams();
@@ -398,6 +466,188 @@ export default async function PilotagePage({
               )}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      {/* Block 5: Deals à risque (SENTINEL) */}
+      <section id="sentinel" className="rounded-xl border border-amber-200 bg-white p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">4. Deals à risque · SENTINEL ({atRiskDeals.length})</h2>
+            <p className="text-xs text-slate-500">Signaux actifs (sans prochaine étape &gt;7 j, no-show &gt;24 h, devis &gt;5 j, non activé &gt;7 j, paiement échoué).</p>
+          </div>
+          <form action={triggerSentinelScan}>
+            <SubmitButton className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700">
+              Scanner SENTINEL maintenant
+            </SubmitButton>
+          </form>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-amber-50/70 text-xs uppercase text-slate-500">
+              <tr>
+                {["Salon & Stade", "Motif du risque", "Depuis", "Relance suggérée", "Traitement"].map((h) => (
+                  <th key={h} className="px-3 py-2 font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {atRiskDeals.map((d) => {
+                const latestRelance = d.suggestions[0];
+                const relancePayload = (latestRelance?.proposedPayload ?? {}) as Record<string, unknown>;
+                return (
+                  <tr key={d.id}>
+                    <td className="px-3 py-2.5">
+                      <Link href={`/salons/${d.salon.id}`} className="font-semibold text-slate-900 hover:text-rose-600">{d.salon.name}</Link>
+                      <p className="text-xs text-slate-500">{STAGE_META_MAP[d.stage].label} · {d.owner?.name ?? d.owner?.email ?? "Non attribué"}</p>
+                    </td>
+                    <td className="px-3 py-2.5 text-xs font-medium text-rose-700">{d.riskReason ?? "Signal actif"}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-500">{d.riskFlaggedAt ? frenchDate(d.riskFlaggedAt) : `J+${d.ageDays}`}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-700 max-w-xs">{typeof relancePayload.followUpMessage === "string" ? relancePayload.followUpMessage : "À préparer"}</td>
+                    <td className="px-3 py-2.5 text-xs">
+                      <span className={cn("rounded-full px-2 py-0.5 font-semibold", d.riskHandledStatus === "RESOLVED" ? "bg-emerald-100 text-emerald-800" : d.riskHandledStatus === "RELANCE_PROPOSED" ? "bg-violet-100 text-violet-800" : "bg-amber-100 text-amber-800")}>
+                        {d.riskHandledStatus === "RESOLVED" ? "Traité" : d.riskHandledStatus === "RELANCE_PROPOSED" ? "Relance proposée" : "À traiter"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {atRiskDeals.length === 0 && (
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-xs text-slate-400">Aucun deal à risque détecté. Cliquez sur « Scanner SENTINEL maintenant » pour lancer une vérification immédiate.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Block 6 & 7: Objections & Playbook + Leviers de closing (MENTOR) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section id="objections" className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-slate-950">5. Objections & Playbook · MENTOR</h2>
+            <Link href="/playbook" className="text-xs font-medium text-violet-700 hover:underline">Ouvrir MENTOR Q&A →</Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 uppercase text-slate-500">
+                <tr>
+                  <th className="px-2.5 py-2">Objection</th>
+                  <th className="px-2.5 py-2">Freq.</th>
+                  <th className="px-2.5 py-2">Succès</th>
+                  <th className="px-2.5 py-2">Réponse retenue</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {objectionStats.map((o) => (
+                  <tr key={o.category}>
+                    <td className="px-2.5 py-2 font-medium text-slate-900">{o.label}</td>
+                    <td className="px-2.5 py-2 font-semibold">{o.count}</td>
+                    <td className="px-2.5 py-2">{o.successRatePct != null ? `${o.successRatePct} %` : "—"}</td>
+                    <td className="px-2.5 py-2 text-slate-600">{o.topResponse ?? "—"}</td>
+                  </tr>
+                ))}
+                {objectionStats.length === 0 && (
+                  <tr><td colSpan={4} className="px-2.5 py-5 text-center text-slate-400">Aucune objection extraite sur la période. Elles remontent automatiquement via ECHO & MENTOR.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {playbookSuggestions.length > 0 && (
+            <div className="rounded-lg bg-violet-50 p-3 text-xs space-y-1.5">
+              <p className="font-semibold text-violet-950">Ajouts au playbook proposés par MENTOR</p>
+              {playbookSuggestions.map((ps) => (
+                <div key={ps.id} className="flex items-center justify-between gap-2">
+                  <span className="text-violet-900">{ps.title}</span>
+                  <Link href="/suggestions" className="font-semibold text-violet-700 hover:underline">{ps.status === "PENDING" ? "À valider →" : ps.status}</Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section id="leviers" className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+          <h2 className="text-base font-semibold text-slate-950">6. Leviers de closing & Coaching 8 étapes · MENTOR</h2>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {mentorScoresByRep.map((m) => (
+              <div key={m.rep.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                <p className="font-semibold text-slate-800 truncate">{m.rep.name ?? m.rep.email}</p>
+                <p className="mt-1 text-xl font-bold text-violet-700">{m.avgScore != null ? `${m.avgScore}/100` : "—"}</p>
+                <p className="text-slate-500">{m.count} appel(s) scoré(s)</p>
+              </div>
+            ))}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 uppercase text-slate-500">
+                <tr>
+                  <th className="px-2.5 py-2">Argument / Comportement</th>
+                  <th className="px-2.5 py-2">Deals gagnés</th>
+                  <th className="px-2.5 py-2">Deals perdus</th>
+                  <th className="px-2.5 py-2">Impact</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {closingLevers.slice(0, 8).map((l) => (
+                  <tr key={l.lever}>
+                    <td className="px-2.5 py-2 font-medium text-slate-900">{l.lever}</td>
+                    <td className="px-2.5 py-2 text-emerald-700 font-semibold">{l.wonRatePct} % ({l.wonCount})</td>
+                    <td className="px-2.5 py-2 text-slate-500">{l.lostRatePct} % ({l.lostCount})</td>
+                    <td className={cn("px-2.5 py-2 font-semibold", l.liftPct > 0 ? "text-emerald-700" : "text-rose-700")}>
+                      {l.liftPct > 0 ? `+${l.liftPct} pts` : `${l.liftPct} pts`}
+                    </td>
+                  </tr>
+                ))}
+                {closingLevers.length === 0 && (
+                  <tr><td colSpan={4} className="px-2.5 py-5 text-center text-slate-400">En attente de transcriptions évaluées sur des deals gagnés et perdus.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      {/* Block 8: Segmentation clients (SCOUT + ECHO + MENTOR) */}
+      <section id="segmentation" className="rounded-xl border border-slate-200 bg-white p-5 space-y-4">
+        <h2 className="text-base font-semibold text-slate-950">7. Segmentation clients & calibration GTM 1 bis (Priorités A/B/C & Outils)</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Par priorité GTM 1 bis</h3>
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr><th className="px-2.5 py-2">Segment</th><th className="px-2.5 py-2">Deals</th><th className="px-2.5 py-2">Gagnés</th><th className="px-2.5 py-2">Conv.</th><th className="px-2.5 py-2">Meilleur angle</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {gtmSegments.map((s) => (
+                  <tr key={s.segment}>
+                    <td className="px-2.5 py-2"><span className={cn("rounded-full px-2 py-0.5 font-semibold", gtmPriorityBadgeStyle(s.segment.replace("Priorité ", "")))}>{s.segment}</span></td>
+                    <td className="px-2.5 py-2">{s.total}</td>
+                    <td className="px-2.5 py-2 font-semibold text-emerald-700">{s.won}</td>
+                    <td className="px-2.5 py-2 font-semibold">{s.conversionPct} %</td>
+                    <td className="px-2.5 py-2 text-slate-600">{s.topAngle ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Par outil de réservation actuel</h3>
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr><th className="px-2.5 py-2">Outil</th><th className="px-2.5 py-2">Deals</th><th className="px-2.5 py-2">Gagnés</th><th className="px-2.5 py-2">Conv.</th><th className="px-2.5 py-2">Meilleur angle</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {toolSegments.map((s) => (
+                  <tr key={s.segment}>
+                    <td className="px-2.5 py-2 font-medium text-slate-900">{s.segment}</td>
+                    <td className="px-2.5 py-2">{s.total}</td>
+                    <td className="px-2.5 py-2 font-semibold text-emerald-700">{s.won}</td>
+                    <td className="px-2.5 py-2 font-semibold">{s.conversionPct} %</td>
+                    <td className="px-2.5 py-2 text-slate-600">{s.topAngle ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </div>

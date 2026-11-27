@@ -59,7 +59,7 @@ export default async function SuggestionsPage({
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-rose-600">L’agent propose, le commercial valide</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">Suggestions IA & Transcriptions ECHO</h1>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">Suggestions IA · ECHO, SCOUT, CRAFT, SENTINEL & MENTOR</h1>
           <p className="mt-1 text-sm text-slate-500">
             Rien n’est écrit dans le CRM sans validation humaine. {admin ? "Vue manager : accès complet aux validations et modifications de l’équipe." : "Validez, corrigez ou rejetez en un clic."}
           </p>
@@ -182,12 +182,54 @@ export default async function SuggestionsPage({
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <div className="rounded-lg bg-slate-50 p-3 text-xs space-y-1.5">
                     <p className="font-semibold text-slate-800">Proposition structurée</p>
-                    <p><strong>Conversation décideur :</strong> {proposed.isDecisionMakerCall ? "Oui" : "Non"}</p>
-                    {Boolean(proposed.proposedStage) && <p><strong>Stade proposé :</strong> {String(proposed.proposedStage)}</p>}
-                    {Boolean(proposed.nextStep) && <p><strong>Prochaine étape :</strong> {String(proposed.nextStep)} {proposed.nextStepDate ? `(${String(proposed.nextStepDate)})` : ""}</p>}
-                    {Boolean(qual.currentTool) && <p><strong>Outil actuel :</strong> {String(qual.currentTool)}</p>}
-                    {Boolean(qual.mainPain) && <p><strong>Besoin :</strong> {String(qual.mainPain)}</p>}
-                    {Boolean(qual.salesAngle) && <p><strong>Angle :</strong> {String(qual.salesAngle)}</p>}
+                    {s.kind === "QUALIFICATION_UPDATE" && (
+                      <>
+                        <p><strong>Conversation décideur :</strong> {proposed.isDecisionMakerCall ? "Oui" : "Non"}</p>
+                        {Boolean(proposed.proposedStage) && <p><strong>Stade proposé :</strong> {String(proposed.proposedStage)}</p>}
+                        {Boolean(proposed.nextStep) && <p><strong>Prochaine étape :</strong> {String(proposed.nextStep)} {proposed.nextStepDate ? `(${String(proposed.nextStepDate)})` : ""}</p>}
+                        {Boolean(qual.currentTool) && <p><strong>Outil actuel :</strong> {String(qual.currentTool)}</p>}
+                        {Boolean(qual.mainPain) && <p><strong>Besoin :</strong> {String(qual.mainPain)}</p>}
+                        {Boolean(qual.salesAngle) && <p><strong>Angle :</strong> {String(qual.salesAngle)}</p>}
+                      </>
+                    )}
+                    {s.kind === "RELANCE" && (
+                      <>
+                        {Boolean(proposed.channel) && <p><strong>Canal conseillé :</strong> {String(proposed.channel)}</p>}
+                        {Array.isArray(proposed.signals) && <p><strong>Signaux :</strong> {(proposed.signals as string[]).join(" · ")}</p>}
+                        {Boolean(proposed.followUpMessage) && <p className="whitespace-pre-wrap text-slate-700"><strong>Relance suggérée :</strong> {String(proposed.followUpMessage)}</p>}
+                      </>
+                    )}
+                    {s.kind === "PREP_BRIEF" && (
+                      <>
+                        {Boolean(proposed.recommendedAngle) && <p><strong>Angle conseillé :</strong> {String(proposed.recommendedAngle)}</p>}
+                        {Boolean(proposed.salonSummary) && <p>{String(proposed.salonSummary)}</p>}
+                        {Boolean(proposed.demoReminder) && <p className={proposed.demoAccountReady ? "text-emerald-700" : "text-amber-800"}><strong>Compte démo :</strong> {String(proposed.demoReminder)}</p>}
+                        {Boolean(proposed.growthTalkingPoint) && <p className="text-violet-700"><strong>Croissance 3 mois :</strong> {String(proposed.growthTalkingPoint)}</p>}
+                      </>
+                    )}
+                    {s.kind === "QUOTE_DRAFT" && (
+                      <>
+                        <p><strong>Formule :</strong> {String(proposed.label ?? proposed.planCode)} ({String(proposed.cadence ?? "MONTHLY")})</p>
+                        <p><strong>Catalogue HT/mois :</strong> {((Number(proposed.listMonthlyCents ?? 0)) / 100).toLocaleString("fr-FR")} €</p>
+                        {Boolean(proposed.syncIncluded) && <p><strong>Synchro Planity/Treatwell :</strong> incluse (+19 €)</p>}
+                        {Boolean(proposed.lauraChannels) && <p><strong>Option Laura IA :</strong> {String(proposed.lauraChannels)}</p>}
+                        {Boolean(proposed.rationale) && <p className="text-slate-600">{String(proposed.rationale)}</p>}
+                      </>
+                    )}
+                    {s.kind === "EMAIL_DRAFT" && (
+                      <>
+                        <p><strong>Destinataire :</strong> {String(proposed.to || "À compléter sur la fiche salon")}</p>
+                        <p><strong>Objet :</strong> {String(proposed.subject ?? "")}</p>
+                        {Boolean(proposed.body) && <p className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded border border-slate-200 bg-white p-2 text-slate-700">{String(proposed.body)}</p>}
+                      </>
+                    )}
+                    {s.kind === "PLAYBOOK_UPDATE" && (
+                      <>
+                        <p><strong>Catégorie :</strong> {String(proposed.topCategory ?? "")}</p>
+                        <p>{String(proposed.summary ?? "")}</p>
+                        {Boolean(proposed.recommendedAddition) && <p className="text-emerald-800"><strong>Ajout proposé :</strong> {String(proposed.recommendedAddition)}</p>}
+                      </>
+                    )}
                   </div>
 
                   <div className="rounded-lg border border-slate-200 p-3 text-xs space-y-1.5">
