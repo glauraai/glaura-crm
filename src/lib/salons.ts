@@ -17,13 +17,21 @@ export type SalonFilters = {
   arr?: string;
   source?: string; // "SCRAPE" → salons converted from prospecting
   prio?: string; // "today" → active daily priorities, including carried-over pins
+  scope?: string; // "all" → cross-rep read-only browse (Nov 27 brief pp. 7 & 12)
   q?: string;
   page?: string;
 };
 
+export function canEditSalon(viewer: ViewerScope | null | undefined, salon: { assignedToId?: string | null }): boolean {
+  if (!viewer) return false;
+  return isManagerOrAdmin(viewer) || (Boolean(salon.assignedToId) && salon.assignedToId === viewer.id);
+}
+
 function scopedOwnerId(f: SalonFilters, viewer?: ViewerScope): string | undefined {
   if (!viewer) return f.owner;
-  return isManagerOrAdmin(viewer) ? f.owner : viewer.id;
+  if (isManagerOrAdmin(viewer)) return f.owner;
+  if (f.scope === "all") return f.owner;
+  return viewer.id;
 }
 
 // Stored phone numbers are unnormalized, so an ILIKE on the raw column misses
@@ -90,19 +98,53 @@ export async function getSalonCount(f: SalonFilters, viewer: ViewerScope) {
 export type SalonListItem = Awaited<ReturnType<typeof getSalons>>[number];
 
 export async function getSalon(id: string, viewer?: ViewerScope) {
+  // Nov 27 brief pp. 7 & 12: every signed-in rep can view peer salons in read-only mode
+  // (including transcripts) to learn from peers; mutations remain strictly guarded.
+  const canSeeArchived = viewer ? isManagerOrAdmin(viewer) : true;
   return prisma.salon.findFirst({
     where: {
       id,
-      ...(viewer && !isManagerOrAdmin(viewer) ? { assignedToId: viewer.id } : {}),
+      ...(canSeeArchived ? {} : { archivedAt: null }),
     },
     include: {
-      prospect: { select: { source: true, sourceUrl: true, treatwellUrl: true, planityUrl: true, dualPlatformCheckedAt: true } },
-      assignedTo: { select: { name: true, email: true } },
+      prospect: { select: { source: true, sourceUrl: true, treatwellUrl: true, planityUrl: true, dualPlatformCheckedAt: true, instagramFollowers: true } },
+      assignedTo: { select: { id: true, name: true, email: true } },
       activities: { orderBy: { createdAt: "desc" }, include: { user: { select: { name: true } } } },
       reminders: { orderBy: [{ archivedAt: { sort: "asc", nulls: "first" } }, { done: "asc" }, { dueAt: "asc" }] },
       onboardingJobs: { orderBy: { createdAt: "desc" } },
       emailJobs: { orderBy: { createdAt: "desc" }, take: 5 },
-      contacts: { orderBy: [{ isDecisionMaker: "desc" }, { createdAt: "desc" }] },
+      contacts: {
+        orderBy: [{ isDecisionMaker: "desc" }, { createdAt: "desc" }],
+        include: {
+          transcripts: {
+            orderBy: { occurredAt: "desc" },
+            take: 5,
+            select: { id: true, source: true, occurredAt: true, durationSec: true, summary: true, isDecisionMakerCall: true },
+          },
+        },
+      },
+      transcripts: {
+        orderBy: { occurredAt: "desc" },
+        take: 15,
+        include: {
+          contact: { select: { id: true, name: true, role: true } },
+          user: { select: { name: true } },
+          callEvaluation: true,
+        },
+      },
+      callEvaluations: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        include: { user: { select: { name: true } } },
+      },
+      objectionRecords: {
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      },
+      socialSnapshots: {
+        orderBy: { monthKey: "asc" },
+        take: 6,
+      },
       opportunities: {
         orderBy: { createdAt: "desc" },
         include: { owner: { select: { id: true, name: true, email: true } } },
