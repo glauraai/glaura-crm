@@ -29,6 +29,7 @@ import {
   sourceLabelFor,
 } from "@/lib/leads/laura-lead";
 import { provisionLauraAccount } from "@/lib/leads/laura-provision";
+import { assignInboundRoundRobin } from "@/lib/pipeline/actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,6 +98,26 @@ export async function POST(req: NextRequest) {
         },
       });
 
+  // Inbound "Être appelé" leads are Priority A and assigned in round-robin to active commercials.
+  if (!existing && !salon.assignedToId) {
+    try {
+      const assignedRepId = await assignInboundRoundRobin(salon.id);
+      if (assignedRepId) {
+        await prisma.salesTask.create({
+          data: {
+            title: "Appeler sous 48 h — lead entrant",
+            context: notes,
+            assignedToId: assignedRepId,
+            salonId: salon.id,
+            dueAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+          },
+        });
+      }
+    } catch (err) {
+      console.error("laura_lead_round_robin_failed", { salonId: salon.id, error: err });
+    }
+  }
+
   // Only a salon that typed the SMS code gets an account and an access email.
   // The lead above is recorded either way, so an unverified submission is still
   // a callback a commercial can work — it just cannot mint an account for
@@ -130,6 +151,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (account.status === "created" || account.status === "existing") {
+    // Link Salon.providerId immediately so Stripe Checkout offer links & billing sync work out of the box.
+    await prisma.salon
+      .updateMany({ where: { id: salon.id, providerId: null }, data: { providerId: account.uid } })
+      .catch((error: unknown) => console.error("laura_lead_provider_link_failed", { salonId: salon.id, error }));
+
     // After the response, not before it. The salon is watching a spinner and
     // the account already exists — making them wait on an SMTP handshake buys
     // nothing. `after` keeps the invocation alive until the send finishes.

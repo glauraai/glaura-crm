@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { completeReminder } from "@/lib/actions";
-import { requireMember, prospectScope } from "@/lib/access";
+import { isManagerOrAdmin, requireMember, prospectScope } from "@/lib/access";
 import { createSalesTask, finishSalesTask } from "@/lib/task-actions";
 import { getAssignableUsers } from "@/lib/salons";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -12,7 +12,7 @@ const button = "rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white 
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const user = await requireMember();
-  const admin = user.role === "ADMIN";
+  const admin = isManagerOrAdmin(user);
   const sp = await searchParams;
   const done = sp.view === "done";
   const owner = admin ? sp.owner : user.id;
@@ -23,7 +23,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     prisma.salesTask.count({ where }), admin ? getAssignableUsers() : Promise.resolve([]),
     sp.prospect ? prisma.prospect.findFirst({ where: { id: sp.prospect, ...prospectScope(user) }, include: { tournee: true } }) : null,
     sp.salon ? prisma.salon.findFirst({ where: { id: sp.salon, ...(admin ? {} : { assignedToId: user.id }) } }) : null,
-    done ? Promise.resolve([]) : prisma.reminder.findMany({ where: { done: false, archivedAt: null, ...(owner ? { userId: owner } : {}), salon: { archivedAt: null, ...(!admin ? { assignedToId: user.id } : {}) } }, orderBy: { dueAt: "asc" }, take: 50, include: { salon: { select: { id: true, name: true } } } }),
+    done ? Promise.resolve([]) : prisma.reminder.findMany({ where: { done: false, archivedAt: null, ...(owner ? { OR: [{ userId: owner }, { userId: null }] } : {}), salon: { archivedAt: null, ...(!admin ? { assignedToId: user.id } : {}) } }, orderBy: { dueAt: "asc" }, take: 50, include: { salon: { select: { id: true, name: true } } } }),
   ]);
   const initialOwner = prospect?.assignedToId ?? prospect?.tournee?.assignedToId ?? salon?.assignedToId ?? user.id;
   const href = (nextPage: number) => { const qs = new URLSearchParams(); if (owner) qs.set("owner", owner); if (done) qs.set("view", "done"); qs.set("page", String(nextPage)); return `/taches?${qs}`; };

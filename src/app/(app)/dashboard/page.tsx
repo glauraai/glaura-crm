@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/db";
 import { frenchDate } from "@/lib/crm-format";
-import { canAccessInstagram } from "@/lib/access";
+import { canAccessInstagram, isManagerOrAdmin, requireMember } from "@/lib/access";
 import Link from "next/link";
-import { requireMember } from "@/lib/access";
 import { getDashboard } from "@/lib/dashboard";
 import { getSalonOwners } from "@/lib/salons";
 import { TYPE_STYLE } from "@/lib/labels";
@@ -27,10 +26,11 @@ export default async function DashboardPage({
   const sp = await searchParams;
   const session = { user: await requireMember() };
   const viewer = session?.user ? { id: session.user.id, role: session.user.role } : undefined;
-  const isAdmin = viewer?.role === "ADMIN";
+  const isAdmin = isManagerOrAdmin(viewer);
   const selectedOwnerId = isAdmin ? sp.owner : viewer?.id;
+  const now = new Date();
   const [dashboard, owners] = await Promise.all([
-    getDashboard(new Date(), selectedOwnerId),
+    getDashboard(now, selectedOwnerId),
     isAdmin ? getSalonOwners() : Promise.resolve([]),
   ]);
   const selectedOwner = owners.find((owner) => owner.id === selectedOwnerId);
@@ -42,13 +42,30 @@ export default async function DashboardPage({
     const query = qs.toString();
     return query ? `/salons?${query}` : "/salons";
   };
-  const dashboardHref = (ownerId?: string) => (ownerId ? `/dashboard?owner=${ownerId}` : "/dashboard");
+  const period = sp.period === "7d" ? "7d" : sp.period === "90d" ? "90d" : sp.period === "365d" ? "365d" : "30d";
+  const periodDays = period === "7d" ? 7 : period === "90d" ? 90 : period === "365d" ? 365 : 30;
+  const periodSince = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
+  const dashboardHref = (ownerId?: string, nextPeriod = period) => {
+    const qs = new URLSearchParams();
+    if (ownerId) qs.set("owner", ownerId);
+    if (nextPeriod !== "30d") qs.set("period", nextPeriod);
+    const q = qs.toString();
+    return q ? `/dashboard?${q}` : "/dashboard";
+  };
   const taskScope = selectedOwnerId ? { assignedToId: selectedOwnerId } : {};
-  const [openTasks, overdueCount, noOwnerCount, instagramCount] = await Promise.all([
+  const activityOwnerScope = selectedOwnerId ? { userId: selectedOwnerId } : {};
+  const oppOwnerScope = selectedOwnerId ? { ownerId: selectedOwnerId } : {};
+  const [openTasks, overdueCount, noOwnerCount, instagramCount, pendingSuggestionsCount, callsCount, dmCallsCount, rdvScheduledCount, quotesCount, pipelineMrrAgg] = await Promise.all([
     prisma.salesTask.findMany({ where: { ...taskScope, doneAt: null }, orderBy: { dueAt: "asc" }, take: 6, select: { id: true, title: true, dueAt: true, assignedTo: { select: { name: true, email: true } }, salon: { select: { name: true } }, prospect: { select: { name: true } } } }),
     prisma.salesTask.count({ where: { ...taskScope, doneAt: null, dueAt: { lt: new Date() } } }),
     isAdmin ? prisma.prospect.count({ where: { assignedToId: null, tourneeId: null, status: "NOUVEAU" } }) : Promise.resolve(0),
     session?.user && canAccessInstagram(session.user) ? prisma.instagramConversation.count({ where: { resolvedAt: null } }) : Promise.resolve(0),
+    prisma.agentSuggestion.count({ where: { status: "PENDING", ...(selectedOwnerId ? { assignedToId: selectedOwnerId } : {}) } }),
+    prisma.activity.count({ where: { ...activityOwnerScope, type: "APPEL", createdAt: { gte: periodSince } } }),
+    prisma.activity.count({ where: { ...activityOwnerScope, isDecisionMakerCall: true, createdAt: { gte: periodSince } } }),
+    prisma.stageTransition.count({ where: { toStage: "R1_PROGRAMME", createdAt: { gte: periodSince }, opportunity: oppOwnerScope } }),
+    prisma.subscriptionLine.count({ where: { createdAt: { gte: periodSince }, ...(selectedOwnerId ? { createdById: selectedOwnerId } : {}) } }),
+    prisma.opportunity.aggregate({ where: { ...oppOwnerScope, stage: { not: "PERDU" }, salon: { archivedAt: null } }, _sum: { monthlyAmountEur: true } }),
   ]);
   const today = new Intl.DateTimeFormat("fr-FR", {
     timeZone: "Europe/Paris",
@@ -97,16 +114,61 @@ export default async function DashboardPage({
         </div>
       )}
 
+      <section className="mb-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Pilotage & activité commerciale</h2>
+            <p className="text-xs text-slate-500">Appels, conversations décideurs, RDV, devis et pipeline actif sur la période.</p>
+          </div>
+          <div className="flex gap-1.5">
+            {([["7d", "7 j"], ["30d", "30 j"], ["90d", "Trimestre"], ["365d", "Année"]] as const).map(([key, label]) => (
+              <Link
+                key={key}
+                href={dashboardHref(selectedOwnerId, key)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-xs font-medium",
+                  period === key ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+                )}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Appels</p><p className="mt-1 text-2xl font-bold text-slate-950">{callsCount}</p></div>
+          <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Conv. décideurs</p><p className="mt-1 text-2xl font-bold text-emerald-700">{dmCallsCount}</p></div>
+          <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">RDV programmés</p><p className="mt-1 text-2xl font-bold text-indigo-700">{rdvScheduledCount}</p></div>
+          <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Devis / Liens</p><p className="mt-1 text-2xl font-bold text-cyan-700">{quotesCount}</p></div>
+          <Link href="/suggestions" className="rounded-xl bg-violet-50 p-3 hover:bg-violet-100"><p className="text-xs text-violet-700">Suggestions IA</p><p className="mt-1 text-2xl font-bold text-violet-900">{pendingSuggestionsCount}</p></Link>
+          <Link href="/pipeline" className="rounded-xl bg-rose-50 p-3 hover:bg-rose-100"><p className="text-xs text-rose-700">Pipeline MRR</p><p className="mt-1 text-2xl font-bold text-rose-900">{Math.round(pipelineMrrAgg._sum.monthlyAmountEur ?? 0).toLocaleString("fr-FR")} €</p></Link>
+        </div>
+      </section>
+
       <section className="mb-6 grid gap-4 lg:grid-cols-[2fr_1fr]">
         <div className={card}><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold text-slate-950">Prochaines actions</h2><Link href="/taches" className="text-sm font-medium text-rose-700">Toutes les tâches →</Link></div><div className="divide-y divide-slate-100">{openTasks.map(task => <Link key={task.id} href="/taches" className="flex items-start justify-between gap-3 py-3"><div><p className="text-sm font-medium text-slate-900">{task.title}</p><p className="mt-1 text-xs text-slate-500">{task.salon?.name ?? task.prospect?.name ?? "Tâche interne"} · {task.assignedTo.name ?? task.assignedTo.email}</p></div><span className={`shrink-0 text-xs ${task.dueAt < new Date() ? "text-amber-700" : "text-slate-500"}`}>{frenchDate(task.dueAt)}</span></Link>)}{!openTasks.length && <p className="py-8 text-sm text-slate-500">Aucune tâche ouverte. Préparez vos prochaines actions depuis la base de prospects.</p>}</div></div>
         <div className="grid content-start gap-3"><Link href="/taches" className={card}><p className="text-sm text-slate-500">Tâches en retard</p><p className="mt-2 text-3xl font-semibold text-amber-700">{overdueCount}</p></Link>{isAdmin && <Link href="/prospection?owner=none" className={card}><p className="text-sm text-slate-500">Prospects à attribuer</p><p className="mt-2 text-3xl font-semibold text-slate-950">{noOwnerCount}</p></Link>}{session?.user && canAccessInstagram(session.user) && <Link href="/instagram" className={card}><p className="text-sm text-slate-500">Conversations Instagram à traiter</p><p className="mt-2 text-3xl font-semibold text-violet-700">{instagramCount}</p></Link>}</div>
       </section>
-      <Suspense fallback={<div className={cn(card, "mb-6 text-sm text-slate-400")}>Chargement des disponibilités…</div>}>
+      <Suspense fallback={<div className={cn(card, "mb-6 text-sm text-slate-400")}>Chargement de l’agenda…</div>}>
         <AvailabilityPanel
+          viewerEmail={session.user.email}
+          viewerIsAdmin={isAdmin}
           team={isAdmin && !selectedOwner}
-          person={selectedOwner ? { email: selectedOwner.email ?? "", label: `Disponibilités de ${selectedOwner.name ?? selectedOwner.email}` } : session.user.email ? { email: session.user.email, label: "Mes disponibilités" } : undefined}
+          person={
+            selectedOwner
+              ? { id: selectedOwner.id, email: selectedOwner.email ?? "", label: selectedOwner.name ?? selectedOwner.email ?? "" }
+              : { id: session.user.id, email: session.user.email ?? "", label: "Mes rendez-vous" }
+          }
           day={sp.dispo}
-          hrefForDay={(day) => `/dashboard?dispo=${day}`}
+          ownerFilter={ownerParam}
+          periodFilter={sp.period}
+          hrefForDay={(day) => {
+            const qs = new URLSearchParams();
+            if (ownerParam) qs.set("owner", ownerParam);
+            if (sp.period) qs.set("period", sp.period);
+            qs.set("dispo", day);
+            return `/dashboard?${qs}`;
+          }}
         />
       </Suspense>
       <h2 className="mb-3 text-lg font-semibold text-slate-900">Vue d’ensemble des salons</h2>

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { requireAdmin } from "@/lib/access";
+import { isManagerOrAdmin, requireManager } from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { isDailyPriorityActive, startOfDay } from "@/lib/dailyPriority";
 import { geocodeAddress } from "@/lib/geocode";
@@ -18,6 +18,8 @@ import { decryptJobPassword, fetchCompanyUserName, findCredentialJob } from "@/l
 import { renderWelcomeEmail } from "@/lib/onboarding/welcome-email";
 import { getAuth as getFirebaseAuth, getDb as getFirestoreDb } from "@/lib/firebase-admin";
 import { findLinkedFirebaseAccounts, salonDeleteBlocker } from "@/lib/leads/firebase-guard";
+import { CALENDAR_SYNC_ACTIVITY_TYPES, parseParisDateTimeInput } from "@/lib/calendar-sync";
+import { createSalonCalendarEvent } from "@/lib/google-calendar";
 import type { ActivityType, BookingTool, Metier, SalonStatus, SalonType } from "@/generated/prisma/enums";
 
 async function currentUser() {
@@ -33,10 +35,10 @@ async function requireCurrentUser() {
 
 async function assertCanAccessSalon(salonId: string) {
   const user = await requireCurrentUser();
-  if (user.role === "ADMIN") return user;
+  if (isManagerOrAdmin(user)) return user;
 
   const salon = await prisma.salon.findUnique({ where: { id: salonId }, select: { assignedToId: true } });
-  if (!salon || salon.assignedToId !== user.id) throw new Error("Réservé au commercial assigné ou à un admin");
+  if (!salon || salon.assignedToId !== user.id) throw new Error("Réservé au commercial assigné, au manager ou à un admin");
   return user;
 }
 
@@ -174,8 +176,8 @@ export async function createSalon(fd: FormData) {
 export async function updateSalon(id: string, fd: FormData) {
   const me = await assertCanAccessSalon(id);
   const d = await parse(fd);
-  // Reassignment is admin-only — enforced here, never trust the (hidden-for-reps) form field.
-  const assignedToId = me.role === "ADMIN" ? optionalString(fd.get("assignedToId")) : undefined;
+  // Reassignment is manager/admin-only — enforced here, never trust the (hidden-for-reps) form field.
+  const assignedToId = isManagerOrAdmin(me) ? optionalString(fd.get("assignedToId")) : undefined;
   // "Priorité du jour" checkbox: present → keep/pin for today, absent → clear.
   const priorityDate = fd.has("priorityToday") ? startOfDay() : null;
   if (assignedToId && !await prisma.user.findFirst({ where: { id: assignedToId, active: true } })) throw new Error("Le responsable doit être un membre actif.");
@@ -219,9 +221,25 @@ export async function archiveSalon(salonId: string) {
   await assertCanAccessSalon(salonId);
   await prisma.salon.update({
     where: { id: salonId },
-    data: { archivedAt: new Date(), archiveNote: "Archivé depuis la liste des salons", priorityDate: null },
+    data: { archivedAt: new Date(), archiveNote: "Archivé depuis le CRM", priorityDate: null },
   });
+  revalidatePath(`/salons/${salonId}`);
   revalidatePath("/salons");
+  revalidatePath("/pipeline");
+  revalidatePath("/pilotage");
+  revalidatePath("/dashboard");
+}
+
+export async function restoreSalon(salonId: string) {
+  await assertCanAccessSalon(salonId);
+  await prisma.salon.update({
+    where: { id: salonId },
+    data: { archivedAt: null, archiveNote: null },
+  });
+  revalidatePath(`/salons/${salonId}`);
+  revalidatePath("/salons");
+  revalidatePath("/pipeline");
+  revalidatePath("/pilotage");
   revalidatePath("/dashboard");
 }
 
@@ -268,11 +286,87 @@ export async function logActivity(salonId: string, fd: FormData) {
   const me = await assertCanAccessSalon(salonId);
   const type = fd.get("type") as ActivityType;
   const notes = (fd.get("notes") || "").toString().trim();
-  await prisma.activity.create({ data: { salonId, userId: me.id, type, notes: notes || null } });
-  await prisma.salon.update({ where: { id: salonId }, data: { lastContactedAt: new Date(), priorityDate: null } });
+  const scheduledDate = (fd.get("scheduledDate") || "").toString().trim();
+  const scheduledTime = (fd.get("scheduledTime") || "").toString().trim();
+  const rawDuration = Number(fd.get("durationMin") ?? 45);
+  const durationMin = Number.isFinite(rawDuration) && rawDuration >= 15 && rawDuration <= 480 ? Math.round(rawDuration) : 45;
+  const scheduledAt = parseParisDateTimeInput(scheduledDate, scheduledTime);
+  const syncCalendar = fd.get("syncCalendar") === "on" || fd.get("syncCalendar") === "true";
+  const inviteSalon = fd.get("inviteSalon") === "on" || fd.get("inviteSalon") === "true";
+
+  let calendarEventId: string | null = null;
+  let calendarEventUrl: string | null = null;
+  let meetUrl: string | null = null;
+  let notice: string | null = null;
+
+  if (CALENDAR_SYNC_ACTIVITY_TYPES.has(type) && scheduledAt && syncCalendar) {
+    const salon = await prisma.salon.findUnique({
+      where: { id: salonId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        contactName: true,
+        contactEmail: true,
+        phone: true,
+        address: true,
+        instagram: true,
+        notes: true,
+        bookingTool: true,
+        assignedTo: { select: { email: true } },
+      },
+    });
+    const organizerEmail = me.email ?? salon?.assignedTo?.email ?? null;
+    if (salon && organizerEmail) {
+      const calRes = await createSalonCalendarEvent({
+        organizerEmail,
+        type: type as "VISITE" | "VISIO",
+        start: scheduledAt,
+        durationMin,
+        notes: notes || null,
+        inviteSalon,
+        salon,
+      });
+      if (calRes.ok) {
+        calendarEventId = calRes.eventId || null;
+        calendarEventUrl = calRes.htmlLink;
+        meetUrl = calRes.meetUrl;
+        notice =
+          type === "VISIO" && meetUrl
+            ? "Visio ajoutée à Google Agenda avec lien Google Meet."
+            : "Événement ajouté à Google Agenda avec les infos du salon.";
+      } else {
+        notice = calRes.error;
+      }
+    }
+  }
+
+  const now = new Date();
+  await prisma.activity.create({
+    data: {
+      salonId,
+      userId: me.id,
+      type,
+      notes: notes || null,
+      scheduledAt,
+      durationMin: scheduledAt ? durationMin : null,
+      calendarEventId,
+      calendarEventUrl,
+      meetUrl,
+    },
+  });
+  await prisma.salon.update({
+    where: { id: salonId },
+    data: {
+      lastContactedAt: now,
+      priorityDate: null,
+      ...(scheduledAt && scheduledAt > now ? { nextActionAt: scheduledAt } : {}),
+    },
+  });
   revalidatePath(`/salons/${salonId}`);
   revalidatePath("/salons");
   revalidatePath("/dashboard");
+  if (notice) redirect(`/salons/${salonId}?activityNotice=${encodeURIComponent(notice)}`);
 }
 
 export async function addReminder(salonId: string, fd: FormData) {
@@ -433,7 +527,7 @@ export type UploadEmailImageResult = { ok: true; url: string } | { ok: false; er
  * author needs to read. Open to any signed-in user, like editing a template.
  */
 export async function uploadEmailImage(fd: FormData): Promise<UploadEmailImageResult> {
-  await requireAdmin();
+  await requireManager();
 
   const file = fd.get("file");
   if (!file || typeof file === "string") return { ok: false, error: "Aucun fichier" };
@@ -447,7 +541,7 @@ export async function uploadEmailImage(fd: FormData): Promise<UploadEmailImageRe
 }
 
 export async function createEmailTemplate(fd: FormData) {
-  const user = await requireAdmin();
+  const user = await requireManager();
   const payload = parseTemplateForm(fd);
 
   // New templates land at the end of the dropdown rather than silently ahead of
@@ -470,7 +564,7 @@ export async function createEmailTemplate(fd: FormData) {
 }
 
 export async function updateEmailTemplate(id: string, fd: FormData) {
-  await requireAdmin();
+  await requireManager();
   const payload = parseTemplateForm(fd);
 
   // `key` is deliberately not updated — EmailJob rows snapshot it.
@@ -484,7 +578,7 @@ export async function updateEmailTemplate(id: string, fd: FormData) {
 
 /** Soft delete: drops the template from the dropdown, keeps past jobs joinable. */
 export async function archiveEmailTemplate(id: string) {
-  await requireAdmin();
+  await requireManager();
 
   const remaining = await prisma.emailTemplate.count({ where: { archivedAt: null } });
   if (remaining <= 1) throw new Error("Impossible d'archiver le dernier modèle — il en faut au moins un.");
@@ -494,7 +588,7 @@ export async function archiveEmailTemplate(id: string) {
 }
 
 export async function restoreEmailTemplate(id: string) {
-  await requireAdmin();
+  await requireManager();
   await prisma.emailTemplate.update({ where: { id }, data: { archivedAt: null } });
   revalidatePath("/modeles");
 }
@@ -614,7 +708,7 @@ export async function revealOnboardingPassword(jobId: string): Promise<RevealPas
     select: { id: true, loginPassword: true, salon: { select: { assignedToId: true } } },
   });
   if (!job) return { ok: false, error: "Job d'onboarding introuvable" };
-  if (user.role !== "ADMIN" && job.salon.assignedToId !== user.id) return { ok: false, error: "Accès réservé au commercial responsable du salon." };
+  if (!isManagerOrAdmin(user) && job.salon.assignedToId !== user.id) return { ok: false, error: "Accès réservé au commercial responsable du salon." };
   if (!job.loginPassword) return { ok: false, error: "Aucun mot de passe enregistré pour ce job" };
 
   let password: string;
