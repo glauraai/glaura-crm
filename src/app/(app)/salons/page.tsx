@@ -73,8 +73,12 @@ export default async function SalonsPage({
         </p>
       )}
       {salons.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-slate-400">
-          Aucun salon ne correspond à ces filtres.
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
+          <p className="text-sm font-medium text-slate-600">Aucun salon ne correspond à la combinaison de filtres active.</p>
+          <p className="mt-1 text-xs text-slate-400">Chaque filtre sélectionné s’ajoute aux autres (ET). Retirez un filtre ci-dessus ou réinitialisez la vue.</p>
+          <Link href={sp.scope === "all" ? "/salons?scope=all" : "/salons"} className="mt-4 inline-block rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+            Réinitialiser tous les filtres
+          </Link>
         </div>
       ) : sp.view !== "cards" ? (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{["Salon", "Rang GTM & CA", "Provenance", "Statut", "Responsable", "Contact", "Prochaine action", ""].map((title, i) => <th key={i} className="p-4 font-medium">{title}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{salons.map(s => {
