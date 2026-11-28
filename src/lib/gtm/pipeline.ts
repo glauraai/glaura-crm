@@ -250,22 +250,33 @@ export async function runEnrichmentAndRankingPipeline(
         )
       : null;
 
+    const existingBd = (s.gtmScoreBreakdown ?? {}) as Record<string, unknown>;
     const followers = isSharedHandle ? null : (igSignals?.followers ?? s.prospect?.instagramFollowers ?? null);
     const growth = computeThreeMonthAudienceGrowth(s.socialSnapshots);
     const hasPlanity =
       s.bookingTool === "PLANITY" ||
       Boolean(s.prospect?.planityUrl) ||
       parsedNotes.hasPlanityHint ||
-      Boolean(igSignals?.detectedPlanity);
+      Boolean(igSignals?.detectedPlanity) ||
+      Boolean(existingBd.hasPlanity);
     const hasTreatwell =
       s.bookingTool === "TREATWELL" ||
       Boolean(s.prospect?.treatwellUrl) ||
       parsedNotes.hasTreatwellHint ||
-      Boolean(igSignals?.detectedTreatwell);
+      Boolean(igSignals?.detectedTreatwell) ||
+      Boolean(existingBd.hasTreatwell);
     const hasOtherTool =
       ["BOOKSY", "FRESHA", "ACUITY"].includes(s.bookingTool) ||
       parsedNotes.hasOtherToolHint ||
-      Boolean(igSignals?.detectedOtherTool);
+      Boolean(igSignals?.detectedOtherTool) ||
+      Boolean(existingBd.hasOtherTool);
+    const videosPerWeek =
+      igSignals?.videosPerWeek ?? (typeof existingBd.videosPerWeek === "number" ? existingBd.videosPerWeek : null);
+    const bookingFriction = igSignals ? igSignals.bookingFriction : Boolean(existingBd.bookingFriction);
+    const sellsProducts =
+      (igSignals ? igSignals.sellsProducts : Boolean(existingBd.sellsProducts)) || parsedNotes.sellsProductsHint;
+    const hiringSignal = igSignals ? igSignals.hiringSignal : Boolean(existingBd.hiringSignal);
+    const isRecentOpening = company.isRecentOpening || Boolean(existingBd.isRecentOpening);
 
     const staffCount = parsedNotes.staffCount ?? company.staffEstimate;
     const rating = s.rating ?? s.prospect?.googleRating ?? s.prospect?.rating ?? parsedNotes.ratingHint;
@@ -279,16 +290,16 @@ export async function runEnrichmentAndRankingPipeline(
       hasPlanity,
       hasTreatwell,
       hasOtherBookingTool: hasOtherTool,
-      videosPerWeek: igSignals?.videosPerWeek ?? null,
-      postsVideos: igSignals?.postsVideos ?? Boolean(parsedNotes.tiktokHandle),
+      videosPerWeek,
+      postsVideos: (igSignals?.postsVideos ?? (videosPerWeek != null && videosPerWeek > 0)) || Boolean(parsedNotes.tiktokHandle),
       instagramFollowers: followers,
-      bookingFriction: igSignals?.bookingFriction ?? false,
+      bookingFriction,
       staffCount,
-      hasTimingSignal: company.isRecentOpening || Boolean(igSignals?.hiringSignal),
+      hasTimingSignal: isRecentOpening || hiringSignal,
       threeMonthGrowthPct: growth.growthPct,
       googleRating: rating,
       googleReviewCount: reviewCount,
-      sellsProducts: Boolean(igSignals?.sellsProducts) || parsedNotes.sellsProductsHint,
+      sellsProducts,
       postalCode,
       zone: s.prospect?.zone ?? null,
       address: s.address,
@@ -311,7 +322,14 @@ export async function runEnrichmentAndRankingPipeline(
         filterReason: gtm.filterReason,
         growthPct: growth.growthPct,
         igFollowers: followers,
-        videosPerWeek: igSignals?.videosPerWeek ?? null,
+        videosPerWeek,
+        bookingFriction,
+        sellsProducts,
+        hiringSignal,
+        isRecentOpening,
+        hasPlanity,
+        hasTreatwell,
+        hasOtherTool,
         staffCount,
         revenueEur: company.revenueEur,
         netResultEur: company.netResultEur,
@@ -423,23 +441,34 @@ export async function runEnrichmentAndRankingPipeline(
         )
       : null;
 
+    const existingBd = (p.gtmScoreBreakdown ?? {}) as Record<string, unknown>;
     const followers = isSharedHandle ? null : (igSignals?.followers ?? p.instagramFollowers ?? null);
     const growth = computeThreeMonthAudienceGrowth(p.socialSnapshots);
     const hasPlanity =
       Boolean(p.planityUrl) ||
       p.source === "PLANITY" ||
       parsedNotes.hasPlanityHint ||
-      Boolean(igSignals?.detectedPlanity);
+      Boolean(igSignals?.detectedPlanity) ||
+      Boolean(existingBd.hasPlanity);
     const hasTreatwell =
       Boolean(p.treatwellUrl) ||
       p.source === "TREATWELL" ||
       parsedNotes.hasTreatwellHint ||
-      Boolean(igSignals?.detectedTreatwell);
+      Boolean(igSignals?.detectedTreatwell) ||
+      Boolean(existingBd.hasTreatwell);
     const hasOtherTool =
       p.source === "BOOKSY" ||
       p.source === "FRESHA" ||
       parsedNotes.hasOtherToolHint ||
-      Boolean(igSignals?.detectedOtherTool);
+      Boolean(igSignals?.detectedOtherTool) ||
+      Boolean(existingBd.hasOtherTool);
+    const videosPerWeek =
+      igSignals?.videosPerWeek ?? (typeof existingBd.videosPerWeek === "number" ? existingBd.videosPerWeek : null);
+    const bookingFriction = igSignals ? igSignals.bookingFriction : Boolean(existingBd.bookingFriction);
+    const sellsProducts =
+      (igSignals ? igSignals.sellsProducts : Boolean(existingBd.sellsProducts)) || parsedNotes.sellsProductsHint;
+    const hiringSignal = igSignals ? igSignals.hiringSignal : Boolean(existingBd.hiringSignal);
+    const isRecentOpening = company.isRecentOpening || Boolean(existingBd.isRecentOpening);
 
     const staffCount = parsedNotes.staffCount ?? company.staffEstimate;
     const rating = p.googleRating ?? p.rating ?? parsedNotes.ratingHint;
@@ -453,16 +482,16 @@ export async function runEnrichmentAndRankingPipeline(
       hasPlanity,
       hasTreatwell,
       hasOtherBookingTool: hasOtherTool,
-      videosPerWeek: igSignals?.videosPerWeek ?? null,
-      postsVideos: igSignals?.postsVideos ?? Boolean(parsedNotes.tiktokHandle),
+      videosPerWeek,
+      postsVideos: (igSignals?.postsVideos ?? (videosPerWeek != null && videosPerWeek > 0)) || Boolean(parsedNotes.tiktokHandle),
       instagramFollowers: followers,
-      bookingFriction: igSignals?.bookingFriction ?? false,
+      bookingFriction,
       staffCount,
-      hasTimingSignal: company.isRecentOpening || Boolean(igSignals?.hiringSignal),
+      hasTimingSignal: isRecentOpening || hiringSignal,
       threeMonthGrowthPct: growth.growthPct,
       googleRating: rating,
       googleReviewCount: reviewCount,
-      sellsProducts: Boolean(igSignals?.sellsProducts) || parsedNotes.sellsProductsHint,
+      sellsProducts,
       postalCode: p.postalCode,
       zone: p.zone,
       address: p.address,
@@ -484,7 +513,14 @@ export async function runEnrichmentAndRankingPipeline(
         filterReason: gtm.filterReason,
         growthPct: growth.growthPct,
         igFollowers: followers,
-        videosPerWeek: igSignals?.videosPerWeek ?? null,
+        videosPerWeek,
+        bookingFriction,
+        sellsProducts,
+        hiringSignal,
+        isRecentOpening,
+        hasPlanity,
+        hasTreatwell,
+        hasOtherTool,
         staffCount,
         revenueEur: company.revenueEur,
         netResultEur: company.netResultEur,
