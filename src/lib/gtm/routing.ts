@@ -174,17 +174,30 @@ export async function runGtmRescoreAndSnapshots(now = new Date(), limit = 5000) 
         s.prospect?.aiOwnership === "chain_or_franchise" || (s.prospect?.activeSites ?? 0) >= 5,
       instagramHandle: existingBd.sharedIgHandle ? null : s.instagram,
       igStatus: s.prospect?.igStatus ?? (s.instagram ? "CONFIRME" : "A_FAIRE"),
-      hasPlanity: s.bookingTool === "PLANITY" || Boolean(s.prospect?.planityUrl) || parsedNotes.hasPlanityHint,
-      hasTreatwell: s.bookingTool === "TREATWELL" || Boolean(s.prospect?.treatwellUrl) || parsedNotes.hasTreatwellHint,
-      hasOtherBookingTool: ["BOOKSY", "FRESHA", "ACUITY"].includes(s.bookingTool) || parsedNotes.hasOtherToolHint,
+      hasPlanity:
+        s.bookingTool === "PLANITY" ||
+        Boolean(s.prospect?.planityUrl) ||
+        parsedNotes.hasPlanityHint ||
+        Boolean(existingBd.hasPlanity),
+      hasTreatwell:
+        s.bookingTool === "TREATWELL" ||
+        Boolean(s.prospect?.treatwellUrl) ||
+        parsedNotes.hasTreatwellHint ||
+        Boolean(existingBd.hasTreatwell),
+      hasOtherBookingTool:
+        ["BOOKSY", "FRESHA", "ACUITY"].includes(s.bookingTool) ||
+        parsedNotes.hasOtherToolHint ||
+        Boolean(existingBd.hasOtherTool),
       videosPerWeek,
       postsVideos: videosPerWeek != null ? videosPerWeek > 0 : Boolean(parsedNotes.tiktokHandle),
       instagramFollowers: existingBd.sharedIgHandle ? null : followers,
+      bookingFriction: Boolean(existingBd.bookingFriction),
       staffCount,
+      hasTimingSignal: Boolean(existingBd.isRecentOpening) || Boolean(existingBd.hiringSignal),
       threeMonthGrowthPct: growth.growthPct,
       googleRating: s.rating ?? parsedNotes.ratingHint,
       googleReviewCount: s.prospect?.reviewCount ?? parsedNotes.reviewCountHint ?? null,
-      sellsProducts: parsedNotes.sellsProductsHint,
+      sellsProducts: Boolean(existingBd.sellsProducts) || parsedNotes.sellsProductsHint,
       postalCode: s.prospect?.postalCode ?? null,
       zone: s.prospect?.zone ?? null,
       address: s.address,
@@ -244,18 +257,29 @@ export async function runGtmRescoreAndSnapshots(now = new Date(), limit = 5000) 
     }
 
     const growth = computeThreeMonthAudienceGrowth(p.socialSnapshots);
+    const parsedNotes = parseLeadNotes(p.notes);
+    const existingBd = (p.gtmScoreBreakdown ?? {}) as Record<string, unknown>;
+    const videosPerWeek = typeof existingBd.videosPerWeek === "number" ? existingBd.videosPerWeek : null;
+    const staffCount =
+      parsedNotes.staffCount ?? (typeof existingBd.staffCount === "number" ? existingBd.staffCount : null);
     const result = scoreAccountGtm1Bis({
       alreadyClient: p.status === "DEJA_CRM",
       isChainOrFranchise: p.aiOwnership === "chain_or_franchise" || (p.activeSites ?? 0) >= 5,
-      instagramHandle: p.instagram,
+      instagramHandle: existingBd.sharedIgHandle ? null : p.instagram,
       igStatus: p.igStatus,
-      hasPlanity: Boolean(p.planityUrl) || p.source === "PLANITY",
-      hasTreatwell: Boolean(p.treatwellUrl) || p.source === "TREATWELL",
-      hasOtherBookingTool: p.source === "BOOKSY" || p.source === "FRESHA",
-      instagramFollowers: p.instagramFollowers,
+      hasPlanity: Boolean(p.planityUrl) || p.source === "PLANITY" || parsedNotes.hasPlanityHint || Boolean(existingBd.hasPlanity),
+      hasTreatwell: Boolean(p.treatwellUrl) || p.source === "TREATWELL" || parsedNotes.hasTreatwellHint || Boolean(existingBd.hasTreatwell),
+      hasOtherBookingTool: p.source === "BOOKSY" || p.source === "FRESHA" || parsedNotes.hasOtherToolHint || Boolean(existingBd.hasOtherTool),
+      videosPerWeek,
+      postsVideos: videosPerWeek != null ? videosPerWeek > 0 : Boolean(parsedNotes.tiktokHandle),
+      instagramFollowers: existingBd.sharedIgHandle ? null : p.instagramFollowers,
+      bookingFriction: Boolean(existingBd.bookingFriction),
+      staffCount,
+      hasTimingSignal: Boolean(existingBd.isRecentOpening) || Boolean(existingBd.hiringSignal),
       threeMonthGrowthPct: growth.growthPct,
-      googleRating: p.googleRating ?? p.rating,
-      googleReviewCount: p.googleReviewCount ?? p.reviewCount,
+      googleRating: p.googleRating ?? p.rating ?? parsedNotes.ratingHint,
+      googleReviewCount: p.googleReviewCount ?? (p.reviewCount > 0 ? p.reviewCount : parsedNotes.reviewCountHint ?? 0),
+      sellsProducts: Boolean(existingBd.sellsProducts) || parsedNotes.sellsProductsHint,
       postalCode: p.postalCode,
       zone: p.zone,
       address: p.address,
@@ -268,6 +292,7 @@ export async function runGtmRescoreAndSnapshots(now = new Date(), limit = 5000) 
         gtmPriority: result.priority,
         gtmAngle: result.angle,
         gtmScoreBreakdown: {
+          ...existingBd,
           igUnverified: result.igUnverified,
           filterReason: result.filterReason,
           growthPct: growth.growthPct,
