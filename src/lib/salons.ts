@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { activeDailyPriorityDateFilter } from "@/lib/dailyPriority";
 import { phoneSearchTerm } from "@/lib/phone";
 import { isManagerOrAdmin } from "@/lib/roles";
+import { buildOriginWhere } from "@/lib/salons-filter";
 import { LeadSource, Metier, SalonStatus, SalonType } from "@/generated/prisma/enums";
 
 export type ViewerScope = {
@@ -14,9 +15,10 @@ export type SalonFilters = {
   metier?: string;
   type?: string;
   gtm?: string; // A | B | C | CHAINE | HORS_CIBLE
-  owner?: string;
+  origin?: string; // website | website_pro | website_laura | website_callback | scrape | import | airtable
+  owner?: string; // userId or "none" (unassigned)
   arr?: string;
-  source?: string; // "SCRAPE" → salons converted from prospecting
+  source?: string; // legacy "SCRAPE" → salons converted from prospecting
   prio?: string; // "today" → active daily priorities, including carried-over pins
   scope?: string; // "all" → cross-rep read-only browse (Nov 27 brief pp. 7 & 12)
   sort?: string; // "rank" (default) | "recent"
@@ -59,30 +61,34 @@ async function salonWhere(f: SalonFilters, viewer: ViewerScope): Promise<import(
   const ownerId = scopedOwnerId(f, viewer);
   const phoneTerm = q ? phoneSearchTerm(q) : null;
   const phoneMatchIds = phoneTerm ? await salonIdsMatchingPhone(phoneTerm) : [];
+  const originClause = buildOriginWhere(f.origin);
+  const andClauses: import("@/generated/prisma/client").Prisma.SalonWhereInput[] = [];
+  if (originClause) andClauses.push(originClause);
+  if (q) {
+    andClauses.push({
+      OR: [
+        { name: { contains: q, mode: "insensitive" as const } },
+        { contactName: { contains: q, mode: "insensitive" as const } },
+        { contactEmail: { contains: q, mode: "insensitive" as const } },
+        { instagram: { contains: q, mode: "insensitive" as const } },
+        { address: { contains: q, mode: "insensitive" as const } },
+        { notes: { contains: q, mode: "insensitive" as const } },
+        ...(phoneMatchIds.length ? [{ id: { in: phoneMatchIds } }] : []),
+      ],
+    });
+  }
   return {
-      // Merged duplicates stay in the table but out of the pipeline.
-      archivedAt: null,
-      ...(f.status && Object.values(SalonStatus).includes(f.status as SalonStatus) ? { status: f.status as SalonStatus } : {}),
-      ...(f.metier && Object.values(Metier).includes(f.metier as Metier) ? { metier: { has: f.metier as Metier } } : {}),
-      ...(f.type && Object.values(SalonType).includes(f.type as SalonType) ? { type: f.type as SalonType } : {}),
-      ...(f.gtm && ["A", "B", "C", "CHAINE", "HORS_CIBLE"].includes(f.gtm) ? { gtmPriority: f.gtm } : {}),
-      ...(ownerId ? { assignedToId: ownerId } : {}),
-      ...(f.arr ? { arrondissement: f.arr } : {}),
-      ...(f.source && Object.values(LeadSource).includes(f.source as LeadSource) ? { source: f.source as LeadSource } : {}),
-      ...(f.prio === "today" ? { priorityDate: activeDailyPriorityDateFilter() } : {}),
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" as const } },
-              { contactName: { contains: q, mode: "insensitive" as const } },
-              { contactEmail: { contains: q, mode: "insensitive" as const } },
-              { instagram: { contains: q, mode: "insensitive" as const } },
-              { address: { contains: q, mode: "insensitive" as const } },
-              { notes: { contains: q, mode: "insensitive" as const } },
-              ...(phoneMatchIds.length ? [{ id: { in: phoneMatchIds } }] : []),
-            ],
-          }
-        : {}),
+    // Merged duplicates stay in the table but out of the pipeline.
+    archivedAt: null,
+    ...(f.status && Object.values(SalonStatus).includes(f.status as SalonStatus) ? { status: f.status as SalonStatus } : {}),
+    ...(f.metier && Object.values(Metier).includes(f.metier as Metier) ? { metier: { has: f.metier as Metier } } : {}),
+    ...(f.type && Object.values(SalonType).includes(f.type as SalonType) ? { type: f.type as SalonType } : {}),
+    ...(f.gtm && ["A", "B", "C", "CHAINE", "HORS_CIBLE"].includes(f.gtm) ? { gtmPriority: f.gtm } : {}),
+    ...(ownerId === "none" ? { assignedToId: null } : ownerId ? { assignedToId: ownerId } : {}),
+    ...(f.arr ? { arrondissement: f.arr } : {}),
+    ...(!originClause && f.source && Object.values(LeadSource).includes(f.source as LeadSource) ? { source: f.source as LeadSource } : {}),
+    ...(f.prio === "today" ? { priorityDate: activeDailyPriorityDateFilter() } : {}),
+    ...(andClauses.length ? { AND: andClauses } : {}),
   };
 }
 
